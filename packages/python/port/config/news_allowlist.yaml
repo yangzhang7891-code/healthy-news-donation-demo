@@ -1,0 +1,39 @@
+# News-source allowlist.
+#
+# The single, auditable place where "counts as news" is decided. A
+# researcher (or a reviewer of this project) can read and edit this
+# file without touching any Python. This is a research decision, not
+# a technical one — extending it to more outlets, or to non-Danish
+# outlets for a different study, should not require a code change.
+#
+# Seeded 2026-08-27 from the seven outlets named in the project brief.
+# Deliberately not generated from fixtures/names_da.py — that file is
+# synthetic test data that happens to reuse these same names; this
+# file is the actual research decision.
+#
+# match: substring (default) — case-insensitive substring match. Right
+#   for exports where the channel/account field can carry a longer
+#   descriptive string around the outlet name (seen in the Meta
+#   fixtures, e.g. a page name suffixed with a bio-like tagline).
+# match: exact — case-insensitive full-string match only. Needed for
+#   "Information": it's also an ordinary Danish word, so a loose
+#   substring match would false-positive on any unrelated account
+#   whose name or bio happens to contain "information" (plausible in
+#   Danish social copy — e.g. "...for mere information om...").
+
+outlets:
+  - name: "DR Nyheder"
+    aliases: ["drnyheder"]
+  - name: "TV 2 Nyhederne"
+    aliases: ["tv2nyhederne", "tv 2 nyhederne"]
+  - name: "Politiken"
+    aliases: ["politiken"]
+  - name: "Berlingske"
+    aliases: ["berlingske"]
+  - name: "Ekstra Bladet"
+    aliases: ["ekstrabladet"]
+  - name: "Zetland"
+    aliases: ["zetland", "zetland_dk"]
+  - name: "Information"
+    aliases: ["information_dk"]
+    match: exact

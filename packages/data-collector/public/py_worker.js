@@ -147,13 +147,25 @@ function startPyodide() {
 
 function loadPackages() {
   console.log("[ProcessingWorker] loading packages");
-  return self.pyodide.loadPackage(["micropip", "numpy", "pandas"]);
+  // pyyaml: parses port/config/news_allowlist.yaml.
+  // tzdata is NOT in this list: Pyodide v0.24.0 doesn't carry it in its
+  // own package repo (checked against its pyodide-lock.json, 2026-08-27)
+  // — it's installed from PyPI via micropip below instead.
+  return self.pyodide.loadPackage(["micropip", "numpy", "pandas", "pyyaml"]);
 }
 
 function installPortPackage() {
   console.log("[ProcessingWorker] load port package");
   return self.pyodide.runPythonAsync(`
     import micropip
+    # zoneinfo needs an IANA tz database, which Pyodide doesn't bundle
+    # with the interpreter itself — without this, ZoneInfo("Europe/
+    # Copenhagen") raises ZoneInfoNotFoundError only in the browser (the
+    # local dev/test environment usually has an OS tz database already,
+    # so this gap is easy to miss until it's actually run in-browser).
+    # tzdata is pure-Python (data files only), so a PyPI wheel install
+    # works even though it isn't in Pyodide's own package repo.
+    await micropip.install("tzdata")
     await micropip.install("./port-0.0.0-py3-none-any.whl", deps=False)
     import port
   `);

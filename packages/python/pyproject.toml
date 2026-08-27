@@ -3,11 +3,28 @@ name = "port"
 version = "0.0.0"
 description = "Port package with Data DataSubmission"
 authors = ["Emiel van der Veen <e.vanderveen@eyra.co>"]
-include = [{ path = "port/assets", format = ["sdist", "wheel"] }]
+include = [
+  { path = "port/assets", format = ["sdist", "wheel"] },
+  { path = "port/config", format = ["sdist", "wheel"] },
+]
 
 [tool.poetry.dependencies]
 python = ">=3.11"
+# KNOWN VERSION SKEW, left unpinned deliberately — see MONITORING.md.
+# Pyodide v0.24.0 (packages/data-collector/public/py_worker.js) bundles
+# pandas 1.5.3 and numpy 1.25.2, confirmed against its own pyodide-lock.json
+# (2026-08-27); micropip.install(..., deps=False) means this project's own
+# pandas resolution has zero effect on what actually runs in the browser.
+# Pinning pytest to 1.5.3 to match was tried and abandoned: pandas 1.x has
+# no prebuilt wheel for Python 3.12+, and this project (and its own CI)
+# targets 3.11+/3.14 — building it from source isn't a realistic dev-loop
+# dependency. So local pytest and the browser runtime are on genuinely
+# different pandas majors (1.x vs 3.x, spanning real breaking changes:
+# copy-on-write defaults, dtype handling). Any code that touches a
+# DataFrame needs a real in-browser check before being trusted, not just
+# a green pytest run — see the "how this breaks" note in MONITORING.md.
 pandas = "^3.0.0"
+pyyaml = "6.0.1"  # matches Pyodide's bundled version; pure-Python, no build friction
 
 [tool.poetry.group.test.dependencies]
 pytest = "^9.0.0"
