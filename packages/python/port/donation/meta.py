@@ -37,7 +37,7 @@ import zipfile
 from datetime import datetime, timezone
 from typing import Optional
 
-from port.donation.archive_utils import find_by_shape
+from port.donation.archive_utils import ExportFormatError, find_by_shape, has_plausible_html_export
 from port.donation.news_sources import is_news
 from port.donation.schema import DonationRecord
 from port.donation.timezone import format_copenhagen
@@ -172,12 +172,27 @@ def _extract_ad_topic_records(entries: list) -> list[DonationRecord]:
 
 
 def extract_data(zf: zipfile.ZipFile, locale: str = "en") -> list[DonationRecord]:
-    """Extract followed accounts, liked pages, liked/saved posts, searches, and ad topics."""
+    """Extract followed accounts, liked pages, liked/saved posts, searches, and ad topics.
+
+    Raises ExportFormatError (message-free — script.py supplies the
+    locale-appropriate text) if none of the six categories were found
+    anywhere in the archive AND it contains a non-trivial .html file.
+    """
+    following = _find_top_level_list(zf, "relationships_following")
+    pages_liked = _find_top_level_list(zf, "page_likes_v2")
+    liked_posts = _find_top_level_list(zf, "likes_media_likes")
+    saved_posts = _find_top_level_list(zf, "saved_saved_media")
+    searches = _find_top_level_list(zf, "searches_user_searches")
+    ad_topics = _find_top_level_list(zf, "topics_your_topics")
+
+    if not (following or pages_liked or liked_posts or saved_posts or searches or ad_topics) and has_plausible_html_export(zf):
+        raise ExportFormatError()
+
     records: list[DonationRecord] = []
-    records.extend(_extract_connection_records(_find_top_level_list(zf, "relationships_following"), "follow"))
-    records.extend(_extract_connection_records(_find_top_level_list(zf, "page_likes_v2"), "page_like"))
-    records.extend(_extract_post_interaction_records(_find_top_level_list(zf, "likes_media_likes"), "like"))
-    records.extend(_extract_post_interaction_records(_find_top_level_list(zf, "saved_saved_media"), "save"))
-    records.extend(_extract_search_records(_find_top_level_list(zf, "searches_user_searches")))
-    records.extend(_extract_ad_topic_records(_find_top_level_list(zf, "topics_your_topics")))
+    records.extend(_extract_connection_records(following, "follow"))
+    records.extend(_extract_connection_records(pages_liked, "page_like"))
+    records.extend(_extract_post_interaction_records(liked_posts, "like"))
+    records.extend(_extract_post_interaction_records(saved_posts, "save"))
+    records.extend(_extract_search_records(searches))
+    records.extend(_extract_ad_topic_records(ad_topics))
     return records

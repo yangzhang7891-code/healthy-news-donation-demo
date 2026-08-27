@@ -31,7 +31,7 @@ import zipfile
 from datetime import datetime, timezone
 from typing import Optional
 
-from port.donation.archive_utils import find_by_shape
+from port.donation.archive_utils import ExportFormatError, find_by_shape, has_plausible_html_export
 from port.donation.news_sources import is_news
 from port.donation.schema import DonationRecord
 from port.donation.timezone import format_copenhagen
@@ -141,10 +141,25 @@ def _extract_following_records(entries: list) -> list[DonationRecord]:
 
 
 def extract_data(zf: zipfile.ZipFile, locale: str = "en") -> list[DonationRecord]:
-    """Extract browsing history, search history, likes, and following from a TikTok export."""
+    """Extract browsing history, search history, likes, and following from a TikTok export.
+
+    Raises ExportFormatError (message-free — script.py supplies the
+    locale-appropriate text) if none of the four categories were found
+    anywhere in the archive AND it contains a non-trivial .html file —
+    a real (unverified) possibility if TikTok's export defaults to
+    HTML the same way Google Takeout's does.
+    """
+    video_list = _find_category_list(zf, "VideoList")
+    search_list = _find_category_list(zf, "SearchList")
+    like_list = _find_category_list(zf, "ItemFavoriteList")
+    following_list = _find_category_list(zf, "Following")
+
+    if not (video_list or search_list or like_list or following_list) and has_plausible_html_export(zf):
+        raise ExportFormatError()
+
     records: list[DonationRecord] = []
-    records.extend(_extract_link_records(_find_category_list(zf, "VideoList"), "watch"))
-    records.extend(_extract_search_records(_find_category_list(zf, "SearchList")))
-    records.extend(_extract_link_records(_find_category_list(zf, "ItemFavoriteList"), "like"))
-    records.extend(_extract_following_records(_find_category_list(zf, "Following")))
+    records.extend(_extract_link_records(video_list, "watch"))
+    records.extend(_extract_search_records(search_list))
+    records.extend(_extract_link_records(like_list, "like"))
+    records.extend(_extract_following_records(following_list))
     return records

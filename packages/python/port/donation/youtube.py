@@ -162,7 +162,8 @@ def _extract_search_records(entries: list) -> list[DonationRecord]:
 def extract_data(zf: zipfile.ZipFile, locale: str = "en") -> list[DonationRecord]:
     """Extract watch + search history from a Google Takeout YouTube export.
 
-    Raises ExportFormatError if the archive looks like it was exported
+    Raises ExportFormatError (message-free — script.py supplies the
+    locale-appropriate text) if the archive looks like it was exported
     in HTML format instead of JSON. Returns an empty list (not an
     error) if watch/search history genuinely isn't present — a paused
     history is a valid state, not a failure.
@@ -171,10 +172,7 @@ def extract_data(zf: zipfile.ZipFile, locale: str = "en") -> list[DonationRecord
     search_match = find_by_shape(zf, _is_search_history_shape)
 
     if watch_match is None and search_match is None and has_plausible_html_export(zf):
-        raise ExportFormatError(
-            "This export looks like it was downloaded in HTML format. "
-            "Please re-request your Google Takeout export with 'JSON' selected as the output format."
-        )
+        raise ExportFormatError()
 
     records: list[DonationRecord] = []
     if watch_match is not None:
