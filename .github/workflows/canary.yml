@@ -1,0 +1,74 @@
+name: Extraction canary
+
+# Runs on every push and PR, and — the part that matters for fieldwork —
+# once a week on a schedule. Platform schema changes don't arrive with a
+# commit: the repository can sit untouched for a month while a donation
+# study quietly collects records missing their main variable. The weekly
+# run is what turns "we'd notice eventually" into a dated signal.
+#
+# Note what this does and does not prove. It runs the parsers against
+# COMMITTED SYNTHETIC fixtures, so it catches regressions introduced by
+# our own changes, and it will catch a real schema change only once
+# someone updates the fixtures to match a new real export. See
+# MONITORING.md for the difference and for what to do when it fires.
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Mondays 06:00 UTC — a working-week morning, so a failure is seen
+    # on a day someone can act on it rather than over a weekend.
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          # 3.12 rather than the 3.14 used by the release workflow: this is the
+          # version the extraction code and its pandas pin are actually developed
+          # and verified against locally. Worth revisiting together, not drifting apart.
+          python-version: "3.12"
+
+      - name: Install Poetry
+        run: pipx install poetry
+
+      - name: Install dependencies
+        working-directory: packages/python
+        run: poetry install --with test
+
+      - name: Verify fixtures are reproducible from their seed
+        working-directory: packages/python
+        # The committed archives are the thing every test asserts against.
+        # If regenerating from the same seed no longer reproduces them
+        # byte-for-byte, the generator changed without the fixtures being
+        # refreshed — and every downstream assertion is measuring stale
+        # bytes. Cheap to check, and confusing to debug if left unchecked.
+        run: |
+          poetry run python -m fixtures.generate_fixtures --seed 42 >/dev/null
+          if ! git diff --quiet -- fixtures/archives; then
+            echo "::error::Committed fixtures differ from a fresh seed-42 generation."
+            echo "Regenerate and commit them, or revert the generator change:"
+            echo "  poetry run python -m fixtures.generate_fixtures --seed 42"
+            git --no-pager diff --stat -- fixtures/archives
+            exit 1
+          fi
+
+      - name: Run the canary
+        working-directory: packages/python
+        run: poetry run pytest tests/test_canary.py -v
+
+      - name: Run the full test suite
+        # Runs even if the canary failed, so a schema break doesn't mask
+        # an unrelated regression in the same run.
+        if: ${{ !cancelled() }}
+        working-directory: packages/python
+        run: poetry run pytest tests/ -v
