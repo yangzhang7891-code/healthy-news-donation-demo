@@ -59,6 +59,11 @@ BASELINE: dict[str, dict] = {
     "meta/news_heavy_da.zip": {"total": 132, "by_type": {"follow": 17, "page_like": 12, "like": 40, "save": 40, "search": 20, "ad_topic": 3}, "news": 80, "errors": 2},
     "meta/mixed_en.zip": {"total": 107, "by_type": {"follow": 14, "page_like": 10, "like": 33, "save": 33, "search": 16, "ad_topic": 1}, "news": 27, "errors": 2},
     "meta/news_avoider_en.zip": {"total": 98, "by_type": {"follow": 13, "page_like": 9, "like": 30, "save": 30, "search": 15, "ad_topic": 1}, "news": 1, "errors": 2},
+    # The v2-schema archive carries the same donor's activity as
+    # youtube/news_heavy_en.zip, so it must produce identical numbers.
+    # Any divergence means one of the two supported channel shapes has
+    # regressed — see the worked example in the README.
+    "youtube/schema_v2_news_heavy_en.zip": {"total": 152, "by_type": {"watch": 122, "search": 30}, "news": 90, "errors": 2},
 }
 
 # Minimum share of records that must carry each field, per platform.
@@ -80,6 +85,7 @@ FILL_FLOORS = [
     ("youtube/news_heavy_en.zip", {"search"}, "content_ref", 0.95, 1.00),
     ("youtube/news_heavy_en.zip", None, "timestamp_copenhagen", 0.95, 0.99),
     ("youtube/news_heavy_da.zip", {"watch"}, "channel_or_account", 0.85, 0.96),
+    ("youtube/schema_v2_news_heavy_en.zip", {"watch"}, "channel_or_account", 0.85, 0.96),
     ("tiktok/new_news_heavy_en.zip", {"watch", "like"}, "content_ref", 0.95, 1.00),
     ("tiktok/new_news_heavy_en.zip", {"follow"}, "channel_or_account", 0.95, 1.00),
     ("tiktok/new_news_heavy_en.zip", None, "timestamp_copenhagen", 0.95, 0.99),

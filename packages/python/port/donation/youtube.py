@@ -49,7 +49,7 @@ def _looks_like_watch_entry(entry: object) -> bool:
     """
     if not isinstance(entry, dict):
         return False
-    if "subtitles" in entry:
+    if "subtitles" in entry or "channel" in entry:  # v1 and v2 channel fields
         return True
     url = entry.get("titleUrl")
     return isinstance(url, str) and "watch?v=" in url
@@ -96,20 +96,36 @@ def _parse_youtube_time(value) -> tuple[str | None, str | None]:
 
 
 def _first_channel_name(item: SafeData) -> str | None:
-    """First subtitle's "name" field, or None if there are no subtitles (removed/private stub).
+    """The channel name, read from whichever schema this export uses.
 
-    Checks key presence directly before touching SafeData's accessor: a
-    removed-video stub legitimately has no "subtitles" key at all, and
-    that's a real gap in what YouTube tells us, not a parse error — routing
-    it through get_list() would log a spurious error on every single one.
+    Two shapes are accepted, because donations already collected were
+    parsed from the older one and still have to keep working:
+
+        v1  "subtitles": [{"name": ..., "url": ...}]   (a list)
+        v2  "channel":   {"name": ..., "url": ...}     (a single object)
+
+    Returns None where the export genuinely carries no channel — a
+    removed or private video stub has neither key. That's a real gap in
+    what YouTube tells us rather than a parse error, so key presence is
+    checked before touching SafeData's accessors; routing it through
+    get_list() would log a spurious error on every such record and
+    drown the error rate the canary watches.
     """
     raw = item.raw()
-    if not isinstance(raw, dict) or "subtitles" not in raw:
+    if not isinstance(raw, dict):
         return None
-    for sub in item.get_list("subtitles"):
-        name = sub.get_str("name", default="")
+
+    if "subtitles" in raw:
+        for sub in item.get_list("subtitles"):
+            name = sub.get_str("name", default="")
+            if name:
+                return name
+
+    if "channel" in raw:
+        name = item.get_dict("channel").get_str("name", default="")
         if name:
             return name
+
     return None
 
 

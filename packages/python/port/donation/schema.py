@@ -26,8 +26,15 @@ from typing import Optional
 # Bump whenever a field is added/removed/reinterpreted, or a platform's
 # extraction logic changes in a way that could change past output for
 # the same input.
-PARSER_VERSION = "1.0.0"
-PAYLOAD_SCHEMA_VERSION = "1.0.0"
+PARSER_VERSION = "1.1.0"
+# 1.1.0 (2026-08-27): YouTube extraction learned the v2 channel shape
+#   ("channel" object alongside the older "subtitles" list). Donations
+#   stamped 1.0.0 that came from a v2 export have an empty channel
+#   column and cannot be distinguished from genuine news avoiders on
+#   their own — see the worked example in the README.
+# 1.0.0: initial.
+
+PAYLOAD_SCHEMA_VERSION = "1.0.0"  # envelope shape unchanged by the above
 
 
 @dataclass
