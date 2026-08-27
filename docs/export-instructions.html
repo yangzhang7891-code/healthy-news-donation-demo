@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<!--
+  One-page printable instruction sheet for the data donation stand.
+  Danish and English side by side, so a single printed sheet serves
+  both without the volunteer having to hand out the right version.
+
+  Open in any browser and print (Ctrl/Cmd+P) at A4. Layout is checked
+  to fit one page; if you edit the copy, re-check the fit — an
+  overflow silently becomes a second, mostly-blank page.
+
+  RESEARCHER NOTE, not printed on the sheet: the click paths below
+  were written 2026-08-27 from documented export flows and have NOT
+  been re-walked against the live platform UIs in this session. All
+  three companies change these menus regularly, and the wording of
+  the format setting is the most likely thing to drift. Walk through
+  each flow yourself before a stand runs, and correct anything stale
+  here — a wrong click path at the stand costs a donation, since the
+  export has to be re-requested and can take days to arrive.
+-->
+<html lang="da">
+<head>
+<meta charset="utf-8">
+<title>Sådan henter du dine data — How to download your data</title>
+<style>
+  @page { size: A4 portrait; margin: 11mm; }
+
+  :root {
+    --ink: #1a1a1a;
+    --muted: #5a5a5a;
+    --rule: #c8c8c8;
+    --flag: #8a5a00;
+    --flag-bg: #fdf4e3;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink);
+    /* Sized to fill the A4 page rather than to a default: this is read
+       standing up at a stand, so the type is as large as one page allows.
+       Re-check the fit (see the note at the top) if you edit the copy. */
+    font-size: 9.8pt;
+    line-height: 1.34;
+  }
+
+  /* On screen, mimic the printed sheet so what you see is what prints. */
+  @media screen {
+    body { background: #eee; padding: 24px; }
+    .sheet {
+      width: 210mm;
+      min-height: 297mm;
+      padding: 11mm;
+      margin: 0 auto;
+      background: #fff;
+      box-shadow: 0 2px 12px rgba(0,0,0,.18);
+    }
+  }
+  @media print {
+    body { background: #fff; padding: 0; }
+    .sheet { width: auto; padding: 0; box-shadow: none; }
+  }
+
+  h1 {
+    font-size: 15pt;
+    margin: 0 0 1mm;
+    letter-spacing: -0.2px;
+  }
+  h1 .en { color: var(--muted); font-weight: normal; }
+
+  .intro {
+    font-size: 8.9pt;
+    color: var(--muted);
+    margin: 0 0 3mm;
+    padding-bottom: 2.5mm;
+    border-bottom: 1.5px solid var(--ink);
+  }
+
+  /* The single most common failure: exporting HTML instead of JSON. */
+  .alert {
+    background: var(--flag-bg);
+    border: 1.2px solid var(--flag);
+    border-radius: 2mm;
+    padding: 2.2mm 3mm;
+    margin-bottom: 3.5mm;
+  }
+  .alert strong { color: var(--flag); }
+  .alert p { margin: 0; }
+  .alert p + p { margin-top: 1mm; color: var(--muted); }
+
+  .platform {
+    margin-bottom: 3.2mm;
+    padding-bottom: 2.7mm;
+    border-bottom: 1px solid var(--rule);
+    break-inside: avoid;
+  }
+  .platform:last-of-type { border-bottom: none; }
+
+  .platform h2 {
+    font-size: 11.2pt;
+    margin: 0 0 1.6mm;
+  }
+  .platform h2 .where {
+    font-size: 8.5pt;
+    font-weight: normal;
+    color: var(--muted);
+  }
+
+  .cols {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 5mm;
+  }
+  .cols h3 {
+    font-size: 8.6pt;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--muted);
+    margin: 0 0 1mm;
+  }
+  ol { margin: 0; padding-left: 4.2mm; }
+  li { margin-bottom: 0.85mm; }
+  li:last-child { margin-bottom: 0; }
+
+  /* Tight horizontal padding on purpose: these are frequently followed
+     directly by a comma or full stop, and wider padding leaves the
+     punctuation looking detached from the phrase it belongs to. */
+  b.key { background: #f0f0f0; padding: 0 0.35mm; border-radius: 0.6mm; }
+
+  footer {
+    margin-top: 3.5mm;
+    padding-top: 2.5mm;
+    border-top: 1.5px solid var(--ink);
+    font-size: 8.5pt;
+    color: var(--muted);
+  }
+  footer .cols { gap: 5mm; }
+  footer p { margin: 0 0 1mm; }
+  footer p:last-child { margin-bottom: 0; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <h1>Sådan henter du dine data <span class="en">/ How to download your data</span></h1>
+  <p class="intro">
+    Du har ret til en kopi af dine data efter GDPR artikel 15. Du henter dem selv hos platformen — vi ser dem først, når du selv vælger at dele dem.
+    <br>
+    You have the right to a copy of your data under GDPR Article 15. You request it yourself from the platform — we only see it if you choose to share it.
+  </p>
+
+  <div class="alert">
+    <p><strong>⚠ Vælg JSON — ikke HTML.</strong> Vælger du HTML, kan vi ikke læse filen, og du skal bestille igen.</p>
+    <p><strong>⚠ Choose JSON — not HTML.</strong> If you pick HTML we cannot read the file and you will have to request it again.</p>
+  </div>
+
+  <div class="platform">
+    <h2>1. YouTube <span class="where">— Google Takeout (takeout.google.com)</span></h2>
+    <div class="cols">
+      <div>
+        <h3>Dansk</h3>
+        <ol>
+          <li>Gå til <b class="key">takeout.google.com</b> og log ind.</li>
+          <li>Klik <b class="key">Fravælg alle</b>, og sæt så kun flueben ved <b class="key">YouTube og YouTube Music</b>.</li>
+          <li>Klik <b class="key">Alle YouTube-data medtaget</b> → fravælg alt → vælg kun <b class="key">historik</b>.</li>
+          <li>Klik <b class="key">Flere formater</b> → sæt <b class="key">Historik</b> til <b class="key">JSON</b>.</li>
+          <li>Vælg <b class="key">.zip</b> og eksportér én gang. Du får en mail, når filen er klar.</li>
+        </ol>
+      </div>
+      <div>
+        <h3>English</h3>
+        <ol>
+          <li>Go to <b class="key">takeout.google.com</b> and sign in.</li>
+          <li>Click <b class="key">Deselect all</b>, then tick only <b class="key">YouTube and YouTube Music</b>.</li>
+          <li>Click <b class="key">All YouTube data included</b> → deselect all → select only <b class="key">history</b>.</li>
+          <li>Click <b class="key">Multiple formats</b> → set <b class="key">History</b> to <b class="key">JSON</b>.</li>
+          <li>Choose <b class="key">.zip</b> and export once. You'll get an email when it's ready.</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <div class="platform">
+    <h2>2. TikTok <span class="where">— i appen / in the app</span></h2>
+    <div class="cols">
+      <div>
+        <h3>Dansk</h3>
+        <ol>
+          <li>Åbn appen → <b class="key">Profil</b> → menuen <b class="key">☰</b> øverst til højre.</li>
+          <li><b class="key">Indstillinger og privatliv</b> → <b class="key">Konto</b> → <b class="key">Download dine data</b>.</li>
+          <li>Under <b class="key">Anmod om data</b>: vælg filformat <b class="key">JSON</b> (ikke TXT).</li>
+          <li>Vælg alle data, og send anmodningen.</li>
+          <li>Hent filen under fanen <b class="key">Download data</b>, når den er klar.</li>
+        </ol>
+      </div>
+      <div>
+        <h3>English</h3>
+        <ol>
+          <li>Open the app → <b class="key">Profile</b> → <b class="key">☰</b> menu, top right.</li>
+          <li><b class="key">Settings and privacy</b> → <b class="key">Account</b> → <b class="key">Download your data</b>.</li>
+          <li>Under <b class="key">Request data</b>: choose file format <b class="key">JSON</b> (not TXT).</li>
+          <li>Select all data, then submit the request.</li>
+          <li>Collect it from the <b class="key">Download data</b> tab once it's ready.</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <div class="platform">
+    <h2>3. Instagram &amp; Facebook <span class="where">— Accounts Centre / Kontocenter</span></h2>
+    <div class="cols">
+      <div>
+        <h3>Dansk</h3>
+        <ol>
+          <li><b class="key">Indstillinger</b> → <b class="key">Kontocenter</b> → <b class="key">Dine oplysninger og tilladelser</b>.</li>
+          <li><b class="key">Download dine oplysninger</b> → <b class="key">Anmod om download</b>.</li>
+          <li>Vælg din konto, og vælg <b class="key">Alle tilgængelige oplysninger</b>.</li>
+          <li>Sæt format til <b class="key">JSON</b> og datointerval til <b class="key">Al tid</b>.</li>
+          <li>Send anmodningen, og hent filen, når du får besked.</li>
+        </ol>
+      </div>
+      <div>
+        <h3>English</h3>
+        <ol>
+          <li><b class="key">Settings</b> → <b class="key">Accounts Centre</b> → <b class="key">Your information and permissions</b>.</li>
+          <li><b class="key">Download your information</b> → <b class="key">Request a download</b>.</li>
+          <li>Pick your account, then choose <b class="key">All available information</b>.</li>
+          <li>Set format to <b class="key">JSON</b> and date range to <b class="key">All time</b>.</li>
+          <li>Submit, then download the file when you're notified.</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <div class="cols">
+      <div>
+        <p><b>Bestil i god tid.</b> Det tager typisk fra nogle timer til flere dage, før filen er klar — bestil helst før du kommer forbi standen.</p>
+        <p><b>Pak ikke filen ud.</b> Tag <b class="key">.zip</b>-filen med, som den er.</p>
+        <p><b>Er din historik sat på pause?</b> Så kan filen være tom. Det er helt i orden — det er også et resultat.</p>
+        <p>Menuerne ændrer sig af og til. Ser noget anderledes ud, så spørg os ved standen.</p>
+      </div>
+      <div>
+        <p><b>Request it early.</b> It usually takes a few hours to several days to arrive — ideally request it before visiting the stand.</p>
+        <p><b>Don't unzip it.</b> Bring the <b class="key">.zip</b> file exactly as you downloaded it.</p>
+        <p><b>History paused?</b> The file may be empty. That's fine — it's a result too.</p>
+        <p>These menus change from time to time. If something looks different, just ask us at the stand.</p>
+      </div>
+    </div>
+  </footer>
+
+</div>
+</body>
+</html>
