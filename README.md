@@ -5,11 +5,20 @@ news exposure in personalised media diets, built on
 [Feldspar](https://github.com/eyra/feldspar) (Eyra's current tool for
 data donation apps; the older `eyra/port` is deprecated).
 
+**▶ Try it: <https://yangzhang7891-code.github.io/healthy-news-donation-demo/>**
+
 A participant brings a data export from YouTube, TikTok, Instagram or
 Facebook. Everything is parsed **in their own browser**, via Python
 compiled to WebAssembly — no export file is ever uploaded. They see
 exactly which rows would be shared, can delete any of them, and only
 then decide whether to donate.
+
+You don't need an export of your own to try it: the landing page links
+four synthetic sample files, including a deliberately wrong-format one
+so you can watch the JSON-vs-HTML detection fire. On the live demo,
+"donate" hands the JSON back to you as a download — there is no server
+and nothing is transmitted anywhere. The first load takes a few
+seconds while Pyodide downloads.
 
 > **This is a portfolio piece, not production software.** No ethics
 > approval, no real participants, no validated classifier. Everything
