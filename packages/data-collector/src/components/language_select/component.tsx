@@ -38,6 +38,45 @@ export const LanguageSelect: React.FC<Props> = ({ onSelect }) => {
           Dansk
         </button>
       </div>
+      <SampleDownloads />
     </div>
   );
 };
+
+// Visitors to the public demo won't have their own platform export to
+// hand — a real one takes hours or days to arrive. Without something to
+// upload, "try it" stops at the file picker. These are the same
+// synthetic fixtures the test suite runs against: no real person's data,
+// and deliberately including the wrong-format case, since the
+// JSON-vs-HTML mistake is the one this project spends the most effort
+// detecting and is worth being able to see happen.
+const SAMPLES = [
+  { file: "sample-youtube-news-heavy.zip", label: "YouTube — news-heavy donor" },
+  { file: "sample-tiktok.zip", label: "TikTok — mixed donor" },
+  { file: "sample-instagram-danish.zip", label: "Instagram — Danish, mangled encoding" },
+  { file: "sample-youtube-wrong-format-html.zip", label: "YouTube — wrong format (HTML)" },
+];
+
+const SampleDownloads: React.FC = () => (
+  <div className="max-w-xl border-t border-gray-200 pt-6 text-sm text-gray-600">
+    <p className="mb-3">
+      No export of your own? Download a synthetic sample to try it with.
+      <span className="block text-xs text-gray-500">
+        Ingen egen dataeksport? Hent et syntetisk eksempel at afprøve med.
+      </span>
+    </p>
+    <ul className="flex flex-wrap justify-center gap-x-4 gap-y-2">
+      {SAMPLES.map((s) => (
+        <li key={s.file}>
+          <a
+            className="rounded underline underline-offset-2 hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            href={`./samples/${s.file}`}
+            download
+          >
+            {s.label}
+          </a>
+        </li>
+      ))}
+    </ul>
+  </div>
+);

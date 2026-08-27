@@ -18,6 +18,19 @@ export interface ScriptHostProps {
   className?: string;
   factories?: PageFactory[];
   logLevel?: LogLevel;
+  /**
+   * Where donated data is sent. Supply one to host the flow somewhere
+   * other than the Next platform.
+   *
+   * Without this, the only options are LiveBridge (production, which
+   * waits for a `live-init` postMessage from a parent iframe) and
+   * FakeBridge (dev, which POSTs to /data-submission). Neither works
+   * for a standalone static deployment: LiveBridge hangs forever
+   * because no parent ever answers, and FakeBridge's endpoint doesn't
+   * exist. Passing a bridge here is the seam that makes such a
+   * deployment possible without editing the framework.
+   */
+  bridge?: Bridge;
 }
 
 const FeldsparContent: React.FC<ScriptHostProps> = ({
@@ -27,6 +40,7 @@ const FeldsparContent: React.FC<ScriptHostProps> = ({
   className,
   factories = [],
   logLevel = "info",
+  bridge,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const assemblyRef = useRef<Assembly | null>(null);
@@ -50,7 +64,10 @@ const FeldsparContent: React.FC<ScriptHostProps> = ({
       assemblyRef.current = assembly;
     };
 
-    if (!standalone && process.env.NODE_ENV === "production") {
+    if (bridge !== undefined) {
+      console.log("Running with a caller-supplied bridge");
+      run(bridge);
+    } else if (!standalone && process.env.NODE_ENV === "production") {
       console.log("Initializing bridge system");
       LiveBridge.create(window, run);
     } else {
@@ -81,7 +98,7 @@ const FeldsparContent: React.FC<ScriptHostProps> = ({
         }
       }, 0);
     };
-  }, [workerUrl, locale, standalone, setState, factories, logLevel]);
+  }, [workerUrl, locale, standalone, setState, factories, logLevel, bridge]);
 
   return (
     <div ref={containerRef} className={className}>
