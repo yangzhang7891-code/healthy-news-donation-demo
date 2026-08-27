@@ -1,269 +1,146 @@
-# Feldspar
+# Healthy News — a data donation demo
 
-Feldspar is an integration mechanism for building data donation applications that can be hosted on the [Next](https://next.eyra.co/) platform. It enables researchers to create custom data extraction and donation flows using Python and React.
+A working demo of a GDPR Article 15 data donation flow for measuring
+news exposure in personalised media diets, built on
+[Feldspar](https://github.com/eyra/feldspar) (Eyra's current tool for
+data donation apps; the older `eyra/port` is deprecated).
 
-## Digital Trace Data Donation (Port)
+A participant brings a data export from YouTube, TikTok, Instagram or
+Facebook. Everything is parsed **in their own browser**, via Python
+compiled to WebAssembly — no export file is ever uploaded. They see
+exactly which rows would be shared, can delete any of them, and only
+then decide whether to donate.
 
-More information about the Port program can be found [here](https://eyra.notion.site/Port-Program-4bbf0bbc466547af95f05c609405c4b2?pvs=4).
+> **This is a portfolio piece, not production software.** No ethics
+> approval, no real participants, no validated classifier. Everything
+> here is developed and tested against synthetic fixtures — there is
+> no real personal data in this repository, and there never should be.
+>
+> Two constraints worth stating up front, because they bound what
+> this data can support: watch history records what was *watched*,
+> not everything that was *recommended*; and Meta exports show diet
+> **supply** (who you follow) rather than **exposure** (what the feed
+> actually showed you). A fuller `LIMITATIONS.md` is still to be
+> written.
 
-Feldspar enables researchers to:
+Full documentation — the GDPR basis, the privacy design, and how to
+run it — is being written up separately. Start with
+[MONITORING.md](MONITORING.md) for how the extraction code is kept
+honest, and the worked example below for why that matters.
 
-- Extract only the data of interest through local processing (on the participant's device) using Python (Pyodide)
-- Prompt participants for questions about the data
-- Enable participants to inspect the extracted data before donation
-- Enable participants to delete table rows before donation
-- Consent or decline to donate the extracted data
+---
 
-## Getting Started
+## Worked example: catching a silent schema break
 
-### Prerequisites
+This is the failure mode the whole test setup exists for, so it's
+worth showing rather than asserting. The sequence below is real, and
+the commits are in the history in this order.
 
-- Fork or clone this repo
-- Install [Node.js](https://nodejs.org/en)
-- Install [pnpm](https://pnpm.io/installation) (Fast, disk space efficient package manager)
-- Install [Python](https://www.python.org/) (Version 3.11 or higher)
-- Install [Poetry](https://python-poetry.org/)
-- Install [Earthly CLI](https://earthly.dev/get-earthly)
+**The premise.** A platform ships an update. YouTube's watch history
+used to identify the channel like this:
 
-### Installation
-
-1. Install dependencies:
-
-   ```sh
-   pnpm install
-   ```
-
-2. Run the project locally with hot reloading (builds Python package and starts the development server):
-
-   ```sh
-   pnpm run start
-   ```
-
-3. Access the application at [http://localhost:3000](http://localhost:3000)
-
-## Customizing the Python Code
-
-The core of Feldspar's functionality is in the Python script at `packages/python/port/script.py`. This script defines the flow of the data donation process.
-
-### Basic Structure
-
-1. Fork the repository to create your own version
-2. Navigate to `packages/python/port/script.py`
-3. Modify the `process(sessionId)` function to customize your data donation flow
-
-A basic donation flow typically includes:
-
-1. Prompt the participant to select a file
-2. Extract relevant data from the file
-3. Present the extracted data in a consent form
-4. Process the participant's consent decision
-
-### Example: Modifying the File Selection Screen
-
-```python
-def prompt_file(extensions):
-    description = props.Translatable({
-        "en": "Please select your data export file.",
-        "de": "Bitte wählen Sie Ihre Datenexportdatei aus.",
-        "it": "Seleziona il tuo file di esportazione dati.",
-        "es": "Por favor, seleccione su archivo de exportación de datos.",
-        "nl": "Selecteer uw data-exportbestand."
-    })
-    return props.PropsUIPromptFileInput(description, extensions)
+```json
+"subtitles": [{"name": "DR Nyheder", "url": "https://youtube.com/channel/UC..."}]
 ```
 
-### Working with Assets
+and now does it like this:
 
-Add any static assets your script needs to `packages/python/port/assets/`. Access them in your script:
-
-```python
-from port.api.assets import *
-
-def process(sessionId):
-    # Path to an asset
-    path = asset_path("my_file.txt")
-
-    # Open an asset directly
-    file = open_asset("my_file.txt")
-
-    # Read asset contents
-    content = read_asset("my_file.txt")
+```json
+"channel": {"name": "DR Nyheder", "url": "https://youtube.com/channel/UC..."}
 ```
 
-### Data Frame Size limits
+A rename plus a shape change — a video has exactly one channel, so
+collapsing the list is a tidy-up an engineer makes without thinking
+about anyone downstream. Nothing announces it.
 
-Row limits for data frames in the Props UI:
-- Consent Table: default maximum of 10,000 rows (configurable)
-- UI hard cap: 50,000 rows (cannot be exceeded)
+**Step 1 — what the old parser does.** It keeps working. That is the
+problem. Running it against the changed export:
 
-For larger datasets, pre-aggregate or sample before display, and review your informed consent and privacy guidelines.
+| signal | healthy export | changed export | different? |
+| --- | --- | --- | --- |
+| exception raised | none | none | no |
+| total records | 152 | 152 | no |
+| counts by record type | 122 watch / 30 search | 122 watch / 30 search | no |
+| parse errors | 2 | 2 | no |
+| timestamps populated | 98.7% | 98.7% | no |
+| **channel name populated** | **95.9%** | **0.0%** | **yes** |
+| **records classified as news** | **90** | **0** | **yes** |
 
-### Local extraction debugging (CLI)
+Every donation collected after this update would look complete and
+arrive with the study's main variable empty. Worse than missing: every
+donor would look like a *committed news avoider*, which is a plausible
+finding rather than an obvious error.
 
-You can run the extraction locally against a real zip file — no browser or Pyodide needed:
+**Step 2 — the canary catches it.** Not because it checked for this
+change, which nobody could have anticipated, but because it asserts on
+the data rather than on the absence of exceptions:
+
+```
+FF.
+
+AssertionError: youtube/schema_v2_news_heavy_en.zip:
+  'channel_or_account' populated in only 0.0% of watch records
+  (floor 85%, was 96% at baseline). A field this empty usually means
+  the platform renamed or moved it — see MONITORING.md.
+assert 0.0 >= 0.85
+
+assert 0 == 90     # news classification count
+```
+
+The `.` at the end of `FF.` is the point of the exercise: the third
+assertion — **record counts against baseline — passed**. A canary that
+only counted rows would have reported this export as healthy.
+
+**Step 3 — the fix.** The parser learns to read the channel from
+either shape, rather than migrating to the new one: donations already
+collected came from v1 exports, and donors receive whichever format the
+platform gives them. `PARSER_VERSION` is bumped 1.0.0 → 1.1.0, which
+is what lets a researcher months later separate donations parsed by the
+broken logic from ones parsed by the fixed logic, instead of pooling
+them and averaging a real signal against an artefact.
+
+**Step 4 — what stays broken.** Teaching the parser this rename does
+not make it immune to the next one. So the demonstration in
+`tests/test_schema_break.py` was kept alive against a rename the parser
+has *not* been taught, because that is the honest general case. The
+parser is not what protects the dataset from an unknown future change —
+the canary is.
+
+**The lesson.** A parser that crashes gets fixed the same day; someone
+sees a crash. A parser that returns the right number of rows and an
+empty column can run for an entire collection period. That asymmetry
+is the argument for asserting on extraction counts *and* field-fill
+rates, and for running them on a schedule rather than only on push.
+
+Reproduce it:
 
 ```bash
-cd packages/python
-poetry run python -m port.script path/to/file.zip
+cd packages/python && poetry run pytest tests/test_schema_break.py -v
 ```
 
-This drives `extract_data()` directly and prints each extracted table to the terminal. Useful for quickly verifying that your extraction logic works before testing it in the browser.
+---
 
-### Adding Dependencies
+## Repository layout
 
-If you need additional Python packages, add them to `packages/python/pyproject.toml` in the `tool.poetry.dependencies` section.
+| Path | What's in it |
+| --- | --- |
+| `packages/python/port/donation/` | One extractor per platform, plus the shared record schema |
+| `packages/python/port/config/` | The news-source allowlist — the auditable "counts as news" decision |
+| `packages/python/port/strings.py` | Every participant-facing string, Danish and English |
+| `packages/python/fixtures/` | The synthetic export generator and its committed archives |
+| `packages/python/tests/` | Per-parser tests, the canary, and the worked example above |
+| `docs/export-instructions.html` | Printable A4 sheet telling donors how to request each export |
+| `MONITORING.md` | What breaks, how you find out, what to do |
+| `docs/feldspar-upstream.md` | Upstream Feldspar's own README, kept for API reference |
 
-## Adding New Visual Components (Advanced)
+## Running the tests
 
-Feldspar allows you to add custom UI components that can be used in your Python script. This is a more advanced feature that requires understanding both Python and React.
-
-### Step 1: Define Component Types
-
-Create a new folder in `packages/data-collector/src/components/my_component/` and add a `types.ts` file:
-
-```typescript
-export interface PropsUIPromptMyComponent {
-  __type__: "PropsUIPromptMyComponent";
-  title: string;
-  // Add any other properties your component needs
-}
+```bash
+cd packages/python && poetry install --with test && poetry run pytest tests/ -v
 ```
 
-### Step 2: Create React Component
+## Running the app
 
-Add a `component.tsx` file to implement your component:
-
-```typescript
-import React from "react";
-import { PropsUIPromptMyComponent } from "./types";
-import { ReactFactoryContext } from "@eyra/feldspar";
-
-type Props = PropsUIPromptMyComponent & ReactFactoryContext;
-
-export const MyComponent: React.FC<Props> = ({ title, resolve }) => {
-  return (
-    <div>
-      <h1>{title}</h1>
-      <button
-        onClick={() => resolve?.({ __type__: "PayloadTrue", value: true })}
-      >
-        Continue
-      </button>
-    </div>
-  );
-};
+```bash
+pnpm install && pnpm run start
 ```
-
-### Step 3: Create Component Factory
-
-Add a new file at `packages/data-collector/src/factories/my_component.tsx`:
-
-```typescript
-import { PromptFactory, ReactFactoryContext } from "@eyra/feldspar";
-import React from "react";
-import { MyComponent } from "../components/my_component/component";
-import { PropsUIPromptMyComponent } from "../components/my_component/types";
-
-export class MyComponentFactory implements PromptFactory {
-  create(body: unknown, context: ReactFactoryContext) {
-    if (this.isMyComponent(body)) {
-      return <MyComponent {...body} {...context} />;
-    }
-    return null;
-  }
-
-  private isMyComponent(body: unknown): body is PropsUIPromptMyComponent {
-    return (
-      (body as PropsUIPromptMyComponent).__type__ === "PropsUIPromptMyComponent"
-    );
-  }
-}
-```
-
-### Step 4: Register Your Component
-
-Update `packages/data-collector/src/App.tsx` to include your new factory:
-
-```typescript
-import { DataSubmissionPageFactory, ScriptHostComponent } from "@eyra/feldspar";
-import { HelloWorldFactory } from "./factories/hello_world";
-import { MyComponentFactory } from "./factories/my_component";
-
-function App() {
-  return (
-    <div className="App">
-      <ScriptHostComponent
-        workerUrl="./py_worker.js"
-        standalone={process.env.NODE_ENV !== "production"}
-        factories={[
-          new DataSubmissionPageFactory({
-            promptFactories: [
-              new HelloWorldFactory(),
-              new MyComponentFactory(), // Add your new factory here
-            ],
-          }),
-        ]}
-      />
-    </div>
-  );
-}
-
-export default App;
-```
-
-### Step 5: Use Your Component in Python
-
-Add a class to your `script.py` to create your component:
-
-```python
-from dataclasses import dataclass
-
-@dataclass
-class PropsUIPromptMyComponent:
-    title: str
-
-    def toDict(self):
-        dict = {}
-        dict["__type__"] = "PropsUIPromptMyComponent"
-        dict["title"] = self.title
-        return dict
-
-def process(sessionId):
-    result = yield render_data_submission_page(
-        PropsUIPromptMyComponent("My Custom Component")
-    )
-    # Handle the result...
-```
-
-## Creating a Release
-
-When your data donation application is ready for deployment:
-
-1. Create a release package:
-
-   ```sh
-   ./release.sh
-   ```
-
-2. Find the generated ZIP file in the `releases/` directory, named with the current date and sequential number (e.g., `feldspar_2023-07-15_1.zip`)
-
-3. This ZIP file can be deployed to:
-   - The Next platform
-   - A self-hosted environment
-   - Any server that can host static files and store the donated data
-
-To use the release in the Next platform, add a "Donate task" and select the generated ZIP file as the "Flow application".
-
-## Important Disclaimer
-
-Please review the [disclaimer](./DISCLAIMER.md) in this repository for important information about technical limitations, logging behavior, and data handling considerations.
-
-## Funding
-
-Feldspar is part of the Port program for data donation and has been funded by the UU, PDI-SSH ([D3i project](https://datadonation.eu/)), and [Eyra](https://www.eyra.co/).
-
-## Contributing
-
-We welcome contributions to make Feldspar better. Please read our [contributing guidelines](https://github.com/eyra/feldspar/blob/master/CONTRIBUTING.md) for details on how to submit issues, feature requests, and pull requests.
-
-<!-- Original detailed API examples and technical specifications can be included here -->
