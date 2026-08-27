@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "feldspar-demo",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@eyra/data-collector", "dev"],
+      "port": 3000
+    }
+  ]
+}

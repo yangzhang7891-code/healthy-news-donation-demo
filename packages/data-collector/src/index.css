@@ -1,0 +1,12 @@
+/* Tailwind build for THIS package's own source (src/**).
+ *
+ * Deliberately separate from @eyra/feldspar's own compiled
+ * dist/styles.css (imported alongside this in index.tsx): that file
+ * is pre-built and doesn't scan this package's source, so classes
+ * used only here (e.g. in components/language_select) need their own
+ * entry point. Uses Tailwind's stock palette rather than feldspar's
+ * custom theme tokens (grey1, primary, ...) to avoid depending on
+ * feldspar's tailwind.config.js, whose `content` glob only covers its
+ * own src/ and wouldn't pick up classes used in this package anyway.
+ */
+@import "tailwindcss";

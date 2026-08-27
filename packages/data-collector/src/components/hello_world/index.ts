@@ -1,1 +1,0 @@
-export { HelloWorldFactory } from './factory';
