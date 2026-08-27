@@ -50,6 +50,12 @@ def generate_all(seed: int, out_dir: Path) -> list[Path]:
 
     emit(out_dir / "youtube" / "html_export.zip", youtube.build_html_export_archive(seed))
 
+    # The deliberate schema break (see the worked example in the README).
+    # Same donor, same activity, one renamed-and-restructured field —
+    # so any difference the canary reports is attributable to that alone.
+    emit(out_dir / "youtube" / "schema_v2_news_heavy_en.zip",
+         youtube.build_schema_change_archive(PERSONAS["news_heavy"], "en", seed))
+
     return written
 
 

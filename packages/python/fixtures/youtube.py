@@ -32,6 +32,7 @@ header "YouTube Music" rather than living in a separate file.
 
 from __future__ import annotations
 
+import json
 import random
 import string
 from dataclasses import dataclass
@@ -224,6 +225,57 @@ def build_archive(persona: Persona, locale: str, seed: int, include_edge_cases: 
     return {
         f"{root}/{s['watch_file']}": json_bytes(watch_records),
         f"{root}/{s['search_file']}": json_bytes(search_records),
+    }
+
+
+def _to_schema_v2_record(record: dict) -> dict:
+    """Rewrite one watch record into a hypothetical future Takeout schema.
+
+    The change modelled here:
+
+        "subtitles": [{"name": ..., "url": ...}]   ->   "channel": {"name": ..., "url": ...}
+
+    A rename plus a shape change (list of one -> single object), which
+    is what a platform update realistically looks like: a video has
+    exactly one channel, so collapsing the array is the kind of tidy-up
+    an engineer makes without considering downstream consumers.
+
+    Chosen deliberately because it is SILENT for anything that only
+    counts rows. The file is still found, every record is still read,
+    the row count is unchanged — only the channel column empties out,
+    taking the news classification with it. See the worked example in
+    the README.
+
+    Nothing else about the record is touched, so any change the canary
+    reports is attributable to this one edit.
+    """
+    if "subtitles" not in record:
+        return dict(record)
+    rewritten = {k: v for k, v in record.items() if k != "subtitles"}
+    subtitles = record["subtitles"]
+    if isinstance(subtitles, list) and subtitles and isinstance(subtitles[0], dict):
+        rewritten["channel"] = dict(subtitles[0])
+    return rewritten
+
+
+def build_schema_change_archive(persona: Persona, locale: str, seed: int) -> ArchiveContent:
+    """The same donor's history, re-rendered in the hypothetical v2 schema.
+
+    Built from build_archive's own output rather than generated
+    independently, so the only difference between this archive and its
+    healthy counterpart is the schema change itself — the underlying
+    activity, timestamps and channels are identical. That is what makes
+    a before/after comparison meaningful rather than merely different.
+    """
+    healthy = build_archive(persona, locale, seed)
+    s = STRINGS[locale]
+    root = s["takeout_root"]
+    watch_path = f"{root}/{s['watch_file']}"
+
+    watch_records = json.loads(healthy[watch_path].decode("utf-8"))
+    return {
+        **healthy,
+        watch_path: json_bytes([_to_schema_v2_record(r) for r in watch_records]),
     }
 
 
