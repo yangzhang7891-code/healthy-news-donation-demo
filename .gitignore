@@ -47,3 +47,6 @@ node_modules/
 .artifacts/
 
 
+
+# Python dev venv used for local fixture/test iteration
+packages/python/.venv/
