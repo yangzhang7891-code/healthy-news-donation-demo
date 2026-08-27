@@ -1,17 +1,30 @@
 name: Build and Deploy to GitHub Pages
 
+# Publishes the donation demo as a static site. The whole flow runs
+# client-side — Pyodide in a web worker — so a static host is genuinely
+# enough; there is no server component and, by design, nowhere for a
+# visitor's data to be sent.
+
 on:
   push:
     branches:
-      - master
+      - main
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
+
+# Never run two deploys at once, but let a newer commit supersede an
+# in-flight one rather than queueing behind it.
+concurrency:
+  group: pages
+  cancel-in-progress: true
 
 jobs:
-  build-and-deploy:
+  build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -29,34 +42,47 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v7
         with:
-          python-version: "3.14"
-          cache: "pip"
+          python-version: "3.12"
 
       - name: Install Poetry
-        run: |
-          python -m pip install --upgrade pip
-          pip install poetry
+        run: pipx install poetry
 
-      - name: Build Python Package
-        working-directory: packages/python
-        run: |
-          poetry lock
-          poetry install
-          poetry build --format wheel
-
-      - name: Install Node Dependencies
+      - name: Install Node dependencies
         run: pnpm install
 
-      - name: Copy Python Wheel
-        run: |
-          mkdir -p packages/data-collector/public
-          cp packages/python/dist/*.whl packages/data-collector/public/
-
-      - name: Build App
+      - name: Build (wheel, framework, app)
+        # `pnpm run build` runs build:py first, which builds the Python
+        # wheel and copies it into the app's public/ directory. The
+        # deployed page loads that wheel into Pyodide at runtime, so a
+        # build that skipped it would produce a site that renders and
+        # then fails the moment extraction starts.
         run: pnpm run build
 
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v4
+      - name: Fail if the wheel is missing from the build output
+        # Cheap guard against exactly that silent failure: the site would
+        # deploy green and break only once a visitor picked a file.
+        run: |
+          if ! ls packages/data-collector/dist/*.whl >/dev/null 2>&1; then
+            echo "::error::No .whl in the build output — Pyodide would have nothing to load."
+            exit 1
+          fi
+          ls -la packages/data-collector/dist/*.whl packages/data-collector/dist/py_worker.js
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./packages/data-collector/build
+          # Vite builds to dist/. Upstream's version of this workflow
+          # published packages/data-collector/build, a leftover from
+          # before the migration to Vite — so it deployed nothing.
+          path: ./packages/data-collector/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -144,3 +144,26 @@ cd packages/python && poetry install --with test && poetry run pytest tests/ -v
 ```bash
 pnpm install && pnpm run start
 ```
+
+Then open http://localhost:3000.
+
+## Attribution and licence
+
+This is a derivative of [eyra/feldspar](https://github.com/eyra/feldspar),
+retaining its full commit history and its **AGPL-3.0** licence — so this
+repository is AGPL-3.0 too, and any network deployment of it (including
+the hosted demo above) has to keep its source available. That's the
+reason the repository is public, not merely a convenience.
+
+Upstream Feldspar is by Eyra, funded by UU, PDI-SSH
+([D3i](https://datadonation.eu/)) and Eyra. Its own README is preserved
+at [docs/feldspar-upstream.md](docs/feldspar-upstream.md).
+
+What this repository adds on top of upstream: the three platform
+extractors and their record schema, the synthetic fixture generator,
+the news-source allowlist, the bilingual string table and kiosk
+language picker, the canary and its CI, the printable instruction
+sheet, and two accessibility fixes plus a `bridge` seam in the
+framework itself (`RadioItem` keyboard operability, `radiogroup`
+semantics, and `ScriptHostComponent`'s optional `bridge` prop) that
+would be reasonable to send upstream.
