@@ -36,26 +36,51 @@ from port.donation.timezone import format_copenhagen
 from port.safe_data import SafeData
 
 
+def _looks_like_watch_entry(entry: object) -> bool:
+    """A watch entry either carries `subtitles` or points at a video URL.
+
+    Both signals are checked rather than just `subtitles`, because
+    `subtitles` is a field name and field names are exactly what a
+    platform schema change renames. The URL shape (`watch?v=`) is
+    structural and, unlike folder names, not localized — so detection
+    survives a rename of the channel field, and the resulting damage
+    shows up as an empty channel column that the canary's fill-rate
+    check catches, rather than as an undetectable file.
+    """
+    if not isinstance(entry, dict):
+        return False
+    if "subtitles" in entry:
+        return True
+    url = entry.get("titleUrl")
+    return isinstance(url, str) and "watch?v=" in url
+
+
+def _looks_like_search_entry(entry: object) -> bool:
+    if not isinstance(entry, dict):
+        return False
+    url = entry.get("titleUrl")
+    return isinstance(url, str) and "search_query" in url
+
+
 def _is_watch_history_shape(path: str, parsed: object) -> bool:
     if not isinstance(parsed, list):
         return False
     if len(parsed) == 0:
         return True  # an empty watch-history.json is a real, valid shape (paused history)
-    # "subtitles" only ever appears on watch entries (search entries never carry it),
-    # so this is what actually distinguishes the two files — sampling only entry [0]
-    # isn't safe, since a removed-video stub (which also lacks "subtitles") could
-    # legitimately be first after shuffling, and would falsely fail this check.
-    return any(isinstance(e, dict) and "subtitles" in e for e in parsed)
+    # Scans every entry, not just entry[0]: a removed-video stub carries
+    # none of these signals and can legitimately sort first.
+    return any(_looks_like_watch_entry(e) for e in parsed)
 
 
 def _is_search_history_shape(path: str, parsed: object) -> bool:
+    """Search entries also carry `time` and `titleUrl`, so the search-specific
+    URL is required AND any watch signal disqualifies the file — otherwise
+    whichever file the zip happened to list first would win both lookups."""
     if not isinstance(parsed, list):
         return False
     if len(parsed) == 0:
         return True
-    has_time_and_url = any(isinstance(e, dict) and "time" in e and "titleUrl" in e for e in parsed)
-    no_subtitles_anywhere = not any(isinstance(e, dict) and "subtitles" in e for e in parsed)
-    return has_time_and_url and no_subtitles_anywhere
+    return any(_looks_like_search_entry(e) for e in parsed) and not any(_looks_like_watch_entry(e) for e in parsed)
 
 
 def _parse_youtube_time(value) -> tuple[str | None, str | None]:
