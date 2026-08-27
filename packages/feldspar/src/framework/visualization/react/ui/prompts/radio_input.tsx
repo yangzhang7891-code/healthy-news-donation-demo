@@ -62,17 +62,35 @@ export const RadioInput = (props: Props): JSX.Element => {
 
   return (
     <>
-      <div className="text-title5 font-title5 sm:text-title4 sm:font-title4 lg:text-title3 lg:font-title3 text-grey1">
+      <div
+        id="radio-group-title"
+        className="text-title5 font-title5 sm:text-title4 sm:font-title4 lg:text-title3 lg:font-title3 text-grey1"
+      >
         {title}
       </div>
       <div className="mt-8" />
       <div id="select-panel">
-        <div className="flex-wrap text-bodylarge font-body text-grey1 text-left">
+        <div
+          id="radio-group-description"
+          className="flex-wrap text-bodylarge font-body text-grey1 text-left"
+        >
           {description}
         </div>
         <div className="mt-4" />
         <div>
-          <div id="radio-group" className="flex flex-col gap-3">
+          {/* Without role="radiogroup", the role="radio" items inside are
+              announced as loose, unrelated controls with no sense of how
+              many options there are or which set they belong to. The
+              title and description carry the only text explaining the
+              choice, so they're wired up as the group's accessible name
+              and description rather than being left as visual-only text. */}
+          <div
+            id="radio-group"
+            className="flex flex-col gap-3"
+            role="radiogroup"
+            aria-labelledby="radio-group-title"
+            aria-describedby="radio-group-description"
+          >
             {renderItems(items)}
           </div>
         </div>
