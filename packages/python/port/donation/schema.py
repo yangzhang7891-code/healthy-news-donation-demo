@@ -78,17 +78,23 @@ def summarize(records: list[DonationRecord]) -> dict:
     }
 
 
-def build_payload(platform: str, records: list[DonationRecord]) -> dict:
-    """The actual JSON handed to CommandSystemDonate — versioned independently of PARSER_VERSION.
+def metadata_row(platform: str) -> dict:
+    """The one row of the small metadata table shown alongside the records table.
 
-    PAYLOAD_SCHEMA_VERSION covers the shape of this envelope (what keys
-    exist at the top level); PARSER_VERSION (stamped per-record) covers
-    how each record's fields were derived. They change for different
-    reasons and a researcher needs to tell which one moved.
+    Feldspar assembles the actual donated JSON client-side from
+    whatever PropsUIPromptConsentFormTable objects are on screen at
+    donate time (each keyed by its own table id) — there's no single
+    Python-side function that builds "the payload" as one object, so
+    PAYLOAD_SCHEMA_VERSION is carried into the donation the same way
+    upstream's own demo carries static reference data: as its own
+    tiny table (see script.py's step_consent), not as a wrapper around
+    the records table. PARSER_VERSION is already a column on every
+    DonationRecord and doesn't need repeating here, but is included
+    for a researcher scanning just this one small table to still see
+    it without cross-referencing the records table.
     """
     return {
+        "platform": platform,
         "payload_schema_version": PAYLOAD_SCHEMA_VERSION,
         "parser_version": PARSER_VERSION,
-        "platform": platform,
-        "records": [r.to_dict() for r in records],
     }
