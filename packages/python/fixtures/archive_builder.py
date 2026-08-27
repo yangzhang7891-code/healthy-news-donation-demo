@@ -16,14 +16,23 @@ from typing import Union
 ArchiveContent = dict[str, Union[str, bytes]]
 
 
+# zipfile.writestr() stamps each entry with the current wall-clock time
+# by default, which would make "the same seed" not actually mean "the
+# same bytes" — pinned so the generator is reproducible byte-for-byte,
+# not just field-for-field.
+_FIXED_DATE_TIME = (2024, 1, 1, 0, 0, 0)
+
+
 def write_archive(contents: ArchiveContent, out_path: Path) -> None:
     """Write `contents` (archive-relative path -> text/bytes) to a zip file."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(out_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        for path, data in contents.items():
+        for path, data in sorted(contents.items()):
             if isinstance(data, str):
                 data = data.encode("utf-8")
-            zf.writestr(path, data)
+            info = zipfile.ZipInfo(path, date_time=_FIXED_DATE_TIME)
+            info.compress_type = zipfile.ZIP_DEFLATED
+            zf.writestr(info, data)
 
 
 def json_bytes(obj) -> bytes:
