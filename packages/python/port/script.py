@@ -1,41 +1,57 @@
 # --------------------------------------------------------------------
-# Note to developers:
+# The news-donation demo's data donation flow.
 #
-# This script (`script.py`) provides a basic data donation flow using
-# standard UI components available in Feldspar.
-#
-# It demonstrates:
-#   - File upload and validation
-#   - Multiple named extraction steps with yield FlushLogs between them
-#     so log messages reach the client in real time during long extractions
-#   - Multiple result tables shown in the consent form
-#
-# For a more advanced example that includes custom UI components
-# (e.g. a custom React-based component integrated with Python),
-# please refer to:
-#
-#     `script_custom_ui.py`
-#
-# That script demonstrates how to define and use your own components
-# using Feldspar's React integration and how to render them via Python.
+# Structure follows Feldspar's own demo script.py: named step functions
+# using `yield from`, FlushLogs between long steps, one retry loop
+# around file selection. What's different is that this flow lets a
+# participant donate from more than one platform in a single session
+# (a real donor is unlikely to use only one), looping the platform
+# picker until they choose to finish.
 # --------------------------------------------------------------------
 
-import port.api.props as props
-from port.api.assets import *
-from port.api.commands import CommandSystemDonate, CommandSystemExit, CommandUIRender, FlushLogs
-from port.safe_data import SafeData
-
-import logging
-import os
-import pandas as pd
-import zipfile
 import json
-import time
-from collections import namedtuple
+import logging
+import zipfile
+
+import pandas as pd
+
+import port.api.props as props
+from port.api.commands import CommandSystemDonate, CommandSystemExit, CommandUIRender, FlushLogs
+from port.donation import meta, tiktok, youtube
+from port.donation.archive_utils import ExportFormatError
+from port.donation.schema import metadata_row, summarize
 
 logger = logging.getLogger(__name__)
 
-ExtractionResult = namedtuple("ExtractionResult", ["name", "data_frame"])
+EXTRACTORS = {
+    "youtube": youtube.extract_data,
+    "tiktok": tiktok.extract_data,
+    "instagram": meta.extract_data,
+}
+
+# Plain, not bilingual: proper nouns read the same in Danish. Only UI
+# copy around them needs translating.
+PLATFORM_LABELS = {
+    "youtube": "YouTube",
+    "tiktok": "TikTok",
+    "instagram": "Instagram / Facebook",
+}
+
+RECORD_COLUMNS = [
+    "record_type", "timestamp_copenhagen", "channel_or_account",
+    "is_news", "content_ref", "is_ad", "had_parse_error", "parser_version",
+]
+
+RECORD_HEADERS = {
+    "record_type": props.Translatable({"en": "Type", "da": "Type"}),
+    "timestamp_copenhagen": props.Translatable({"en": "Time (Copenhagen)", "da": "Tidspunkt (København)"}),
+    "channel_or_account": props.Translatable({"en": "Channel / account", "da": "Kanal / konto"}),
+    "is_news": props.Translatable({"en": "News source?", "da": "Nyhedskilde?"}),
+    "content_ref": props.Translatable({"en": "What it points to", "da": "Hvad det peger på"}),
+    "is_ad": props.Translatable({"en": "Ad?", "da": "Annonce?"}),
+    "had_parse_error": props.Translatable({"en": "Could not be fully read", "da": "Kunne ikke læses fuldt ud"}),
+    "parser_version": props.Translatable({"en": "Parser version", "da": "Parser-version"}),
+}
 
 
 ######################
@@ -43,189 +59,163 @@ ExtractionResult = namedtuple("ExtractionResult", ["name", "data_frame"])
 ######################
 
 def process(data):
-    # `data` is a context dict routed from the JS framework:
-    #   {"sessionId": "...", "locale": "en" | "nl" | ...}
-    # Use `locale` for strings rendered into DataFrame cells (column headers,
-    # summary descriptions) — those bypass the React i18n layer.
     sessionId = data.get("sessionId")
     locale = data.get("locale", "en")
-    logger.info(f"user entered script (locale={locale})")
-    key = "zip-contents-example"
+    logger.info(f"user entered donation flow (locale={locale})")
 
-    results = None
-
+    donated: set[str] = set()
     while True:
-        fileResult = yield from step_1_select_file(key)
-        if fileResult is None:
+        platform = yield from step_select_platform(donated, locale)
+        if platform is None:
             break
+        yield FlushLogs
 
-        results, retry = yield from step_2_extract_data_from_file(key, fileResult, locale)
-        if retry:
-            continue
-        break
+        records = yield from step_extract_platform(platform, locale)
+        if records is not None:
+            yield from step_consent(platform, sessionId, records, locale)
+            donated.add(platform)
 
-    if results:
-        yield from step_3_consent(key, sessionId, results)
+    yield exit(0, "donation flow finished")
 
 
-def step_1_select_file(key):
-    logger.debug(f"{key}: prompt file")
-    fileResult = yield render_data_submission_page([prompt_file("application/zip, text/plain")])
-    if fileResult.__type__ != "PayloadFile":
-        logger.debug(f"{key}: no file selected, exit")
+def step_select_platform(donated: set[str], locale: str):
+    remaining = [p for p in EXTRACTORS if p not in donated]
+    if not remaining:
         return None
-    return fileResult
+
+    labels = [PLATFORM_LABELS[p] for p in remaining]
+    finish_label = "I'm done — finish" if locale != "da" else "Jeg er færdig"
+    items = [{"id": i, "value": label} for i, label in enumerate(labels + [finish_label])]
+
+    result = yield render_data_submission_page(prompt_select_platform(items, bool(donated), locale))
+    if result.__type__ != "PayloadString":
+        return None
+    for platform, label in zip(remaining, labels):
+        if result.value == label:
+            return platform
+    return None  # matched "finish", or nothing matched (shouldn't happen)
 
 
-def step_2_extract_data_from_file(key, fileResult, locale="en"):
-    logger.debug(f"{key}: extracting file")
-    results = None
-    try:
-        results = yield from extract_data(fileResult.value, locale)
-    except (IOError, zipfile.BadZipFile):
-        logger.debug(f"{key}: prompt confirmation to retry file selection")
-        retry_result = yield render_data_submission_page(retry_confirmation())
-        if retry_result.__type__ == "PayloadTrue":
-            return None, True
-        logger.debug(f"{key}: user declined retry, exit")
-        return None, False
-    logger.debug(f"{key}: extraction successful, go to consent form")
-    return results, False
-
-
-def step_3_consent(key, sessionId, results):
-    logger.debug(f"{key}: prompt consent")
-    for prompt in prompt_consent(results):
-        result = yield prompt
-        if result.__type__ == "PayloadJSON":
-            logger.debug(f"{key}: donate consent data")
-            yield donate(f"{sessionId}-{key}", result.value)
-        if result.__type__ == "PayloadFalse":
-            value = json.dumps('{"status" : "data_submission declined"}')
-            yield donate(f"{sessionId}-{key}", value)
-
-
-##########################
-# Zip file processing    #
-##########################
-
-def extract_data(path, locale="en"):
-    """Generator that runs extraction steps, returning the results list.
-
-    Yields FlushLogs between steps so progress logs reach the client in real
-    time rather than all at once when the consent page renders. Call via:
-
-        results = yield from extract_data(path, locale)
-    """
-    logger.info("extract_data: opening zip file")
-    zf = zipfile.ZipFile(path)
-    logger.info(f"extract_data: zip opened, {len(zf.namelist())} files")
-    results = []
-
-    extractors = [
-        ("file inventory", lambda: extract_file_inventory(zf, locale)),
-        ("file types",     lambda: extract_file_types(zf)),
-        ("largest files",  lambda: extract_largest_files(zf)),
-        ("json summary",   lambda: extract_json_summary(zf)),
-    ]
-
-    for name, fn in extractors:
-        logger.debug(f"extract_data: extracting {name}...")
+def step_extract_platform(platform: str, locale: str):
+    extractor = EXTRACTORS[platform]
+    while True:
+        fileResult = yield render_data_submission_page(prompt_file(platform, locale))
+        if fileResult.__type__ != "PayloadFile":
+            return None
         try:
-            results.append(fn())
-            logger.info(f"extract_data: {name} extracted successfully")
-            yield FlushLogs  # stream progress logs to the client in real time between extractors
-        except Exception as e:
-            logger.error(f"extract_data: failed to extract {name}: {e}", exc_info=True)
-            raise
+            with zipfile.ZipFile(fileResult.value) as zf:
+                records = extractor(zf, locale)
+        except ExportFormatError as e:
+            retry = yield render_data_submission_page(retry_confirmation(str(e), locale))
+            if retry.__type__ == "PayloadTrue":
+                continue
+            return None
+        except (IOError, zipfile.BadZipFile):
+            retry = yield render_data_submission_page(retry_confirmation(WRONG_FILE_TEXT[locale], locale))
+            if retry.__type__ == "PayloadTrue":
+                continue
+            return None
+        return records
 
-    logger.info(f"extract_data: done, {len(results)} tables extracted")
-    return results
+
+def step_consent(platform: str, sessionId: str, records: list, locale: str):
+    body = build_consent_body(platform, records, locale)
+    result = yield render_data_submission_page(body)
+    if result.__type__ == "PayloadJSON":
+        yield donate(f"{sessionId}-{platform}", result.value)
+    elif result.__type__ == "PayloadFalse":
+        value = json.dumps({"status": "data_submission declined", "platform": platform})
+        yield donate(f"{sessionId}-{platform}", value)
 
 
-FILE_INVENTORY_HEADERS = {
-    "en": ["Filename", "Compressed size", "Size"],
-    "de": ["Dateiname", "Komprimierte Größe", "Größe"],
-    "it": ["Nome file", "Dimensione compressa", "Dimensione"],
-    "es": ["Nombre de archivo", "Tamaño comprimido", "Tamaño"],
-    "nl": ["Bestandsnaam", "Gecomprimeerde grootte", "Grootte"],
-    "ro": ["Nume fișier", "Dimensiune comprimată", "Dimensiune"],
-    "lt": ["Failo pavadinimas", "Suspaustas dydis", "Dydis"],
+##########################
+# Consent screen content #
+##########################
+
+def build_consent_body(platform: str, records: list, locale: str) -> list:
+    """Everything shown before the donate/decline buttons: a plain-language
+    summary, an explicit statement of what's excluded, and the exact rows
+    that would be shared (editable/removable, per Feldspar's own table UI) —
+    what's shown here IS what gets donated, nothing more."""
+    summary = summarize(records)
+
+    intro = props.PropsUIPromptText(
+        title=props.Translatable({"en": "Review your data", "da": "Gennemgå dine data"}),
+        text=props.Translatable(summary_text(platform, summary, locale)),
+    )
+    drop_statement = props.PropsUIPromptText(
+        title=props.Translatable({"en": "What we don't collect", "da": "Hvad vi ikke indsamler"}),
+        text=props.Translatable(DROP_STATEMENT_TEXT[platform]),
+    )
+
+    records_df = pd.DataFrame([{c: getattr(r, c) for c in RECORD_COLUMNS} for r in records], columns=RECORD_COLUMNS)
+    records_table = props.PropsUIPromptConsentFormTable(
+        "records", 1,
+        props.Translatable({"en": "Your activity", "da": "Din aktivitet"}),
+        props.Translatable({
+            "en": "Every row below is exactly what would be donated. Remove any row you don't want to share.",
+            "da": "Hver række nedenfor er præcis, hvad der ville blive doneret. Fjern enhver række, du ikke ønsker at dele.",
+        }),
+        records_df,
+        headers=RECORD_HEADERS,
+    )
+
+    metadata_df = pd.DataFrame([metadata_row(platform)])
+    metadata_table = props.PropsUIPromptConsentFormTable(
+        "metadata", 2,
+        props.Translatable({"en": "Technical version info", "da": "Teknisk versionsinfo"}),
+        props.Translatable({
+            "en": "Which version of the extraction logic produced the data above — lets a researcher tell donations processed by different logic apart.",
+            "da": "Hvilken version af udtræksprocessen der producerede dataene ovenfor.",
+        }),
+        metadata_df,
+    )
+
+    buttons = props.PropsUIDataSubmissionButtons(
+        donate_question=props.Translatable({
+            "en": "Would you like to donate the data above?",
+            "da": "Vil du donere dataene ovenfor?",
+        }),
+        donate_button=props.Translatable({"en": "Yes, donate", "da": "Ja, donér"}),
+    )
+
+    return [intro, drop_statement, records_table, metadata_table, buttons]
+
+
+def summary_text(platform: str, summary: dict, locale: str) -> dict:
+    by_type = ", ".join(f"{v} {k}" for k, v in summary["by_record_type"].items())
+    en = (
+        f"We found {summary['total_records']} records ({by_type}). "
+        f"{summary['news_records']} were flagged as coming from a source on our news list. "
+        f"{summary['parse_error_records']} record(s) could not be fully read and are marked below."
+    )
+    da = (
+        f"Vi fandt {summary['total_records']} poster ({by_type}). "
+        f"{summary['news_records']} blev markeret som kommende fra en kilde på vores nyhedsliste. "
+        f"{summary['parse_error_records']} post(er) kunne ikke læses fuldt ud og er markeret nedenfor."
+    )
+    return {"en": en, "da": da}
+
+
+DROP_STATEMENT_TEXT = {
+    "youtube": {
+        "en": "We do not collect video titles, video descriptions, or the full text of anything you searched for — only which channel a video belongs to, when you watched or searched, and whether that channel matched our news-source list.",
+        "da": "Vi indsamler ikke videotitler, videobeskrivelser eller den fulde tekst af det, du har søgt efter — kun hvilken kanal en video tilhører, hvornår du så eller søgte, og om den kanal matchede vores nyhedskildeliste.",
+    },
+    "tiktok": {
+        "en": "We do not collect video captions, comments, or profile bios. TikTok's own export does not include the creator's name on watch/like history, so those rows carry no channel information — only a link, a timestamp, and (for follows) the account you followed.",
+        "da": "Vi indsamler ikke video-tekster, kommentarer eller profilbeskrivelser. TikToks eget dataudtræk indeholder ikke skaberens navn i se-/synes godt om-historik, så disse rækker indeholder ingen kanalinformation — kun et link, et tidspunkt og (for følger) den konto, du fulgte.",
+    },
+    "instagram": {
+        "en": "We do not collect post captions, comment text, or message content. This only covers who you follow, which pages/posts you liked or saved, your search terms, and Meta's own inferred ad-interest topics — not your feed itself, which isn't included in a personal data export.",
+        "da": "Vi indsamler ikke opslagstekster, kommentartekst eller beskedindhold. Dette dækker kun, hvem du følger, hvilke sider/opslag du har synes godt om eller gemt, dine søgeord og Metas egne udledte annonceinteresseemner — ikke selve din feed, som ikke er inkluderet i et personligt dataudtræk.",
+    },
 }
 
-
-def extract_file_inventory(zf, locale="en"):
-    """List every file in the zip with its compressed and uncompressed size.
-
-    Column headers are localized via `locale` — this demonstrates threading the
-    UI locale into DataFrame content, which bypasses the React i18n layer.
-    """
-    headers = FILE_INVENTORY_HEADERS.get(locale, FILE_INVENTORY_HEADERS["en"])
-    filename_col, compressed_col, size_col = headers
-    rows = []
-    for info in zf.infolist():
-        time.sleep(0.01)  # artificial delay — remove in production
-        rows.append({
-            filename_col: info.filename,
-            compressed_col: info.compress_size,
-            size_col: info.file_size,
-        })
-    return ExtractionResult("file_inventory", pd.DataFrame(rows, columns=headers))
-
-
-def extract_file_types(zf):
-    """Count files grouped by extension."""
-    from collections import Counter
-    extensions = Counter(
-        os.path.splitext(name)[1].lower() or "(none)"
-        for name in zf.namelist()
-    )
-    rows = [{"Extension": ext, "Count": count} for ext, count in sorted(extensions.items())]
-    return ExtractionResult("file_types", pd.DataFrame(rows, columns=["Extension", "Count"]))
-
-
-def extract_largest_files(zf, n=10):
-    """Show the top N files by uncompressed size."""
-    files = sorted(zf.infolist(), key=lambda i: i.file_size, reverse=True)[:n]
-    rows = [{"Filename": i.filename, "Size": i.file_size} for i in files]
-    return ExtractionResult("largest_files", pd.DataFrame(rows, columns=["Filename", "Size"]))
-
-
-def extract_json_summary(zf):
-    """Summarise every .json file in the zip using SafeData.
-
-    Demonstrates SafeData usage: each JSON file is parsed with
-    `SafeData.parse_json`, fields are pulled with typed getters that
-    return safe defaults on missing/wrong-type, dotted paths walk into
-    nested objects, and `had_errors()` flags whether the file's data
-    was fully clean.
-
-    The fields below are illustrative — typical donation-data shapes
-    have things like a user profile, an items list, and timestamps.
-    None of the accessors will raise if a field is missing or has an
-    unexpected type; instead the default is used and the error is
-    logged.
-    """
-    rows = []
-    for name in zf.namelist():
-        if not name.lower().endswith(".json"):
-            continue
-        with zf.open(name) as f:
-            data = SafeData.parse_json(f)
-        items = data.get_list_of(SafeData, "items")
-        rows.append({
-            "Filename": name,
-            # The same field may appear under different keys/shapes across
-            # export versions — list the candidates and take the first match.
-            "User": data.get_str("user.name", "user.displayName", "account.fullName", default="(unknown)"),
-            "User ID": data.get_int("user.id", "user.userId", default=0),
-            "Item count": len(items),
-            "Errors": "yes" if data.had_errors() else "no",
-        })
-    return ExtractionResult(
-        "json_summary",
-        pd.DataFrame(rows, columns=["Filename", "User", "User ID", "Item count", "Errors"]),
-    )
+WRONG_FILE_TEXT = {
+    "en": "We couldn't open that file as a zip archive. Please make sure you selected the export .zip file you downloaded, without unzipping it first.",
+    "da": "Vi kunne ikke åbne den fil som et zip-arkiv. Sørg for, at du har valgt den .zip-eksportfil, du downloadede, uden at have udpakket den først.",
+}
 
 
 ######################
@@ -233,157 +223,39 @@ def extract_json_summary(zf):
 ######################
 
 def render_data_submission_page(body):
-    header = props.PropsUIHeader(
-        props.Translatable(
-            {
-                "en": "Data donation flow example",
-                "de": "Beispiel für einen Datenspende-Ablauf",
-                "it": "Esempio di flusso di donazione dei dati",
-                "es": "Ejemplo de flujo de donación de datos",
-                "nl": "Voorbeeld van een datadonatieproces",
-                "ro": "Exemplu de flux de donație a datelor",
-                "lt": "Duomenų dovanojimo srauto pavyzdys",
-            }
-        )
-    )
+    header = props.PropsUIHeader(props.Translatable({
+        "en": "News media diet — data donation",
+        "da": "Nyhedsmediediæt — datadonation",
+    }))
     body_items = [body] if not isinstance(body, list) else body
-    page = props.PropsUIPageDataSubmission("Zip", header, body_items)
+    page = props.PropsUIPageDataSubmission("news-donation", header, body_items)
     return CommandUIRender(page)
 
 
-def retry_confirmation():
-    text = props.Translatable(
-        {
-            "en": "Unfortunately, we cannot process your file. Continue, if you are sure that you selected the right file. Try again to select a different file.",
-            "de": "Leider können wir Ihre Datei nicht bearbeiten. Fahren Sie fort, wenn Sie sicher sind, dass Sie die richtige Datei ausgewählt haben. Versuchen Sie, eine andere Datei auszuwählen.",
-            "it": "Purtroppo non possiamo elaborare il tuo file. Continua se sei sicuro di aver selezionato il file corretto. Prova a selezionare un file diverso.",
-            "es": "Lamentablemente, no podemos procesar su archivo. Continúe si está seguro de que ha seleccionado el archivo correcto. Intente seleccionar un archivo diferente.",
-            "nl": "Helaas, kunnen we uw bestand niet verwerken. Weet u zeker dat u het juiste bestand heeft gekozen? Ga dan verder. Probeer opnieuw als u een ander bestand wilt kiezen.",
-            "ro": "Din păcate, nu putem procesa fișierul dvs. Continuați dacă sunteți sigur că ați selectat fișierul corect. Încercați din nou pentru a selecta un fișier diferit.",
-            "lt": "Deja, negalime apdoroti jūsų failo. Tęskite, jei esate tikri, kad pasirinkote tinkamą failą. Bandykite dar kartą pasirinkti kitą failą.",
-        }
-    )
-    ok = props.Translatable(
-        {
-            "en": "Try again",
-            "de": "Erneut versuchen",
-            "it": "Riprova",
-            "es": "Inténtelo de nuevo",
-            "nl": "Probeer opnieuw",
-            "ro": "Încercați din nou",
-            "lt": "Bandykite dar kartą",
-        }
-    )
-    return props.PropsUIPromptConfirm(text, ok)
-
-
-def prompt_file(extensions):
-    description = props.Translatable(
-        {
-            "en": "Please select a zip file stored on your device.",
-            "de": "Bitte wählen Sie eine ZIP-Datei auf Ihrem Gerät aus.",
-            "it": "Seleziona un file ZIP memorizzato sul tuo dispositivo.",
-            "es": "Por favor, seleccione un archivo ZIP guardado en su dispositivo.",
-            "nl": "Selecteer een ZIP-bestand dat op uw apparaat is opgeslagen.",
-            "ro": "Vă rugăm să selectați un fișier ZIP stocat pe dispozitivul dvs.",
-            "lt": "Prašome pasirinkti ZIP failą, saugomą jūsų įrenginyje.",
-        }
-    )
-    return props.PropsUIPromptFileInput(description, extensions)
-
-
-def prompt_consent(data):
-    """data is a list of ExtractionResult namedtuples from extract_data."""
-    description = props.PropsUIPromptText(
-        text=props.Translatable(
-            {
-                "en": "Please review the data below. You can remove any information you prefer not to share. Thank you for supporting this research project!",
-                "de": "Bitte überprüfen Sie Ihre Daten unten. Sie können alle Daten entfernen, die Sie nicht teilen möchten. Vielen Dank für Ihre Unterstützung dieses Forschungsprojekts!",
-                "it": "Controlla i tuoi dati qui sotto. Puoi rimuovere qualsiasi dato che preferisci non condividere. Grazie per il tuo supporto a questo progetto di ricerca!",
-                "es": "Revise sus datos a continuación. Puede eliminar cualquier dato que prefiera no compartir. ¡Gracias por apoyar este proyecto de investigación!",
-                "nl": "Bekijk hieronder uw gegevens. U kunt gegevens verwijderen die u liever niet deelt. Bedankt voor uw steun aan dit onderzoeksproject!",
-                "ro": "Vă rugăm să revizuiți datele de mai jos. Puteți elimina orice date pe care preferați să nu le partajați. Vă mulțumim că sprijiniți acest proiect de cercetare!",
-                "lt": "Prašome peržiūrėti savo duomenis žemiau. Galite pašalinti bet kokius duomenis, kurių nenorite bendrinti. Ačiū, kad remiate šį tyrimų projektą!",
-            }
-        )
+def prompt_select_platform(items, has_donated: bool, locale: str):
+    if locale == "da":
+        title = "Vælg en platform" if not has_donated else "Vil du donere fra en anden platform?"
+        description = "Vælg, hvilken platforms dataeksport du vil donere fra."
+    else:
+        title = "Choose a platform" if not has_donated else "Donate from another platform?"
+        description = "Choose which platform's data export you'd like to donate from."
+    return props.PropsUIPromptRadioInput(
+        title=props.Translatable({"en": title, "da": title}),
+        description=props.Translatable({"en": description, "da": description}),
+        items=items,
     )
 
-    # Tables derived from the uploaded zip file
-    tables = [
-        props.PropsUIPromptConsentFormTable(
-            result.name,
-            i,
-            props.Translatable({"en": result.name.replace("_", " ").title(), "nl": result.name.replace("_", " ").title()}),
-            props.Translatable({"en": f"Overview of {result.name.replace('_', ' ')} from your zip file."}),
-            result.data_frame,
-        )
-        for i, result in enumerate(data, start=1)
-    ]
 
-    # Example of a static table with hardcoded data — useful for reference data
-    # or metadata that does not come from the uploaded file.
-    static_table = props.PropsUIPromptConsentFormTable(
-        "zip_content",
-        len(data) + 1,
-        props.Translatable(
-            {
-                "en": "Example Metadata Table",
-                "de": "Beispieltabelle für Metadaten",
-                "it": "Tabella di metadati di esempio",
-                "es": "Tabla de metadatos de ejemplo",
-                "nl": "Voorbeeld van metagegevens tabel",
-                "ro": "Tabel de metadate de exemplu",
-                "lt": "Metaduomenų lentelės pavyzdys",
-            }
-        ),
-        props.Translatable(
-            {
-                "en": "This table is static — its content is hardcoded, not derived from the uploaded file. Use this pattern for reference data or study metadata.",
-            }
-        ),
-        pd.DataFrame(
-            [
-                ["participant-001", "Device A", "2025-06-01"],
-                ["participant-002", "Device B", "2025-06-02"],
-                ["participant-003", "Device C", "2025-06-03"],
-            ],
-            columns=["Participant ID", "Device", "Date"],
-        ),
-        data_frame_max_size=5000,
-    )
+def prompt_file(platform: str, locale: str):
+    label = PLATFORM_LABELS[platform]
+    en = f"Please select your {label} data export .zip file."
+    da = f"Vælg din {label} dataeksport .zip-fil."
+    return props.PropsUIPromptFileInput(props.Translatable({"en": en, "da": da}), "application/zip")
 
-    result = yield render_data_submission_page(
-        [description]
-        + tables
-        + [static_table]
-        + [
-            props.PropsUIDataSubmissionButtons(
-                donate_question=props.Translatable(
-                    {
-                        "en": "Would you like to donate the above data?",
-                        "de": "Möchten Sie die obenstehenden Daten spenden?",
-                        "it": "Vuoi donare i dati sopra indicati?",
-                        "es": "¿Le gustaría donar los datos anteriores?",
-                        "nl": "Wilt u de bovenstaande gegevens doneren?",
-                        "ro": "Doriți să donați datele de mai sus?",
-                        "lt": "Ar norėtumėte paaukoti aukščiau pateiktus duomenis?",
-                    }
-                ),
-                donate_button=props.Translatable(
-                    {
-                        "en": "Yes, donate",
-                        "de": "Ja, spenden",
-                        "it": "Sì, dona",
-                        "es": "Sí, donar",
-                        "nl": "Ja, doneer",
-                        "ro": "Da, donez",
-                        "lt": "Taip, paaukokite",
-                    }
-                ),
-            ),
-        ]
-    )
-    return result
+
+def retry_confirmation(message: str, locale: str):
+    ok = props.Translatable({"en": "Try again", "da": "Prøv igen"})
+    return props.PropsUIPromptConfirm(props.Translatable({"en": message, "da": message}), ok)
 
 
 def donate(key, json_string):
@@ -396,12 +268,9 @@ def exit(code, info):
 
 if __name__ == "__main__":
     import sys
-    if len(sys.argv) < 2:
-        print("Usage: python -m port.script path/to/file.zip")
+    if len(sys.argv) < 3 or sys.argv[1] not in EXTRACTORS:
+        print(f"Usage: python -m port.script <{'|'.join(EXTRACTORS)}> path/to/export.zip")
         sys.exit(1)
-    gen = extract_data(sys.argv[1])
-    try:
-        while True:
-            next(gen)
-    except StopIteration as e:
-        print(e.value)
+    with zipfile.ZipFile(sys.argv[2]) as zf:
+        for record in EXTRACTORS[sys.argv[1]](zf, "en"):
+            print(record)
