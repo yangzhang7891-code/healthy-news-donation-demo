@@ -2,5 +2,10 @@ packages:
   - 'packages/*'
 
 allowBuilds:
+  # Native file-watcher pulled in transitively by the dev toolchain.
+  # pnpm 11 refuses to install while an install script is unresolved, which
+  # turns `pnpm run build` into a hard failure — so it has to be answered
+  # explicitly here rather than via a prompt nobody sees in CI.
+  '@parcel/watcher': true
   esbuild: true
   unrs-resolver: true

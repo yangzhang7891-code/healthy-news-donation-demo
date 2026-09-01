@@ -19,8 +19,25 @@ jobs:
         with:
           github-token: "${{ secrets.GITHUB_TOKEN }}"
       
-      - name: Enable auto-merge for Dependabot PRs
+      # Major bumps are NOT auto-merged. This workflow auto-merged
+      # typescript 6 -> 7, which is incompatible with
+      # @rollup/plugin-typescript (it reads ts.ScriptTarget.ES2015, undefined
+      # under TS 7) and broke `pnpm run build` — and with it the Pages
+      # deploy — with no failing check to catch it, because the JS build
+      # isn't exercised by the canary workflow. Patch and minor bumps still
+      # merge automatically; majors now wait for a human.
+      - name: Enable auto-merge for non-major Dependabot PRs
+        if: steps.metadata.outputs.update-type != 'version-update:semver-major'
         run: gh pr merge --auto --merge "$PR_URL"
+        env:
+          PR_URL: ${{github.event.pull_request.html_url}}
+          GH_TOKEN: ${{secrets.GITHUB_TOKEN}}
+
+      - name: Leave a note on major-version PRs
+        if: steps.metadata.outputs.update-type == 'version-update:semver-major'
+        run: |
+          gh pr comment "$PR_URL" --body \
+            "Major version bump — not auto-merged. Check \`pnpm run build\` locally before merging: a previous major (typescript 6 → 7) broke the build and the Pages deploy without failing any check."
         env:
           PR_URL: ${{github.event.pull_request.html_url}}
           GH_TOKEN: ${{secrets.GITHUB_TOKEN}}

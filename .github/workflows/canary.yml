@@ -72,3 +72,45 @@ jobs:
         if: ${{ !cancelled() }}
         working-directory: packages/python
         run: poetry run pytest tests/ -v
+
+  # The canary above is Python-only. Nothing in CI exercised the JavaScript
+  # build until a Dependabot major (typescript 6 -> 7) broke it and was
+  # auto-merged with every check green — the breakage only surfaced when the
+  # Pages deploy ran afterwards, i.e. after it was already on main. This job
+  # runs the real build on pull requests so that class of change fails before
+  # it lands, not after.
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install Poetry
+        run: pipx install poetry
+
+      - name: Install Node dependencies
+        run: pnpm install
+
+      - name: Build wheel, framework, and app
+        run: pnpm run build
+
+      - name: Fail if the wheel is missing from the build output
+        run: |
+          if ! ls packages/data-collector/dist/*.whl >/dev/null 2>&1; then
+            echo "::error::No .whl in the build output — Pyodide would have nothing to load."
+            exit 1
+          fi
