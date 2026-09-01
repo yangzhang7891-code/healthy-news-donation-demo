@@ -91,6 +91,7 @@ def _extract_connection_records(entries: list, record_type: str) -> list[Donatio
             timestamp_utc_raw=raw,
             channel_or_account=name,
             is_news=is_news(name),
+            content_title=None,  # Meta exports carry no post text for these record types
             content_ref=None,
             is_ad=False,
             had_parse_error=item.had_errors() or cph is None or name is None,
@@ -122,6 +123,7 @@ def _extract_post_interaction_records(entries: list, record_type: str) -> list[D
             timestamp_utc_raw=raw_ts,
             channel_or_account=account,
             is_news=is_news(account),
+            content_title=None,  # Meta exports carry no post text for these record types
             content_ref=None,
             is_ad=False,
             had_parse_error=cph is None or account is None,
@@ -144,6 +146,7 @@ def _extract_search_records(entries: list) -> list[DonationRecord]:
             timestamp_utc_raw=raw_ts,
             channel_or_account=None,
             is_news=None,
+            content_title=query,  # for a search the query IS the content
             content_ref=query,
             is_ad=False,
             had_parse_error=cph is None or query is None,
@@ -164,6 +167,7 @@ def _extract_ad_topic_records(entries: list) -> list[DonationRecord]:
             timestamp_utc_raw=None,
             channel_or_account=None,
             is_news=None,  # a topic label isn't a channel/account
+            content_title=None,  # Meta exports carry no post text for these record types
             content_ref=topic,
             is_ad=False,
             had_parse_error=item.had_errors(),

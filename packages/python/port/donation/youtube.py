@@ -146,6 +146,26 @@ def _is_ad_entry(item: SafeData) -> bool:
     return False
 
 
+# Takeout writes the action into the title itself: "Watched <video title>",
+# "Searched for <query>". The verb is localized, so it has to be stripped by
+# matching known prefixes — unlike file paths, there is no content-shape
+# alternative here, because the title IS free text.
+#
+# Only en and da are listed because those are the locales this project
+# actually serves. Anything unmatched falls through and keeps the title
+# whole: retaining "Watched X" is a cosmetic flaw, whereas guessing at a
+# prefix could silently truncate a real title.
+WATCH_TITLE_PREFIXES = ("Watched ", "Så ")
+SEARCH_TITLE_PREFIXES = ("Searched for ", "Søgte efter ")
+
+
+def _strip_known_prefix(title: str, prefixes: tuple[str, ...]) -> str:
+    for prefix in prefixes:
+        if title.startswith(prefix):
+            return title[len(prefix):].strip()
+    return title.strip()
+
+
 def _extract_watch_records(entries: list) -> list[DonationRecord]:
     records = []
     for entry in entries:
@@ -154,6 +174,14 @@ def _extract_watch_records(entries: list) -> list[DonationRecord]:
         is_ad = _is_ad_entry(item)
         raw_entry = item.raw() if isinstance(item.raw(), dict) else {}
         cph, raw = _parse_youtube_time(raw_entry.get("time"))
+
+        # The video title, which is what any content/valence measure runs on.
+        # Absent on removed-private stubs, and the title of an ad is a
+        # placeholder ("Watched an ad") rather than a real video title.
+        raw_title = raw_entry.get("title")
+        content_title = None
+        if isinstance(raw_title, str) and raw_title.strip():
+            content_title = _strip_known_prefix(raw_title, WATCH_TITLE_PREFIXES) or None
         # Direct dict access, not item.get_str(): a removed/private-video stub
         # has no "titleUrl" at all, which is a real gap YouTube leaves in the
         # export, not a parse error — same reasoning as _first_channel_name.
@@ -170,6 +198,7 @@ def _extract_watch_records(entries: list) -> list[DonationRecord]:
             channel_or_account=channel,
             is_news=is_news(channel),
             content_ref=video_id,
+            content_title=content_title,
             is_ad=is_ad,
             had_parse_error=item.had_errors() or cph is None,
         ))
@@ -181,10 +210,14 @@ def _extract_search_records(entries: list) -> list[DonationRecord]:
     for entry in entries:
         item = SafeData.wrap(entry) if not isinstance(entry, SafeData) else entry
         title = item.get_str("title", default="")
-        # "Searched for <query>" (en) / "Søgte efter <query>" (da) — split on the
-        # first space-separated prefix rather than hardcoding either language's
-        # exact wording, since only the query itself is analytically useful.
-        query = title.split(" ", 1)[1] if " " in title else title
+        # "Searched for <query>" (en) / "Søgte efter <query>" (da).
+        #
+        # This used to split on the first space, which left the preposition
+        # attached: "Searched for hospital" yielded "for hospital", and the
+        # Danish form yielded "efter hospital". Every donated query carried a
+        # stray leading word, which would corrupt any text analysis of search
+        # behaviour while still looking superficially plausible in the table.
+        query = _strip_known_prefix(title, SEARCH_TITLE_PREFIXES) or None
         cph, raw = _parse_youtube_time(item.raw().get("time") if isinstance(item.raw(), dict) else None)
         records.append(DonationRecord(
             platform="youtube",
@@ -193,7 +226,8 @@ def _extract_search_records(entries: list) -> list[DonationRecord]:
             timestamp_utc_raw=raw,
             channel_or_account=None,
             is_news=None,  # a search query has no channel to check against the allowlist
-            content_ref=query or None,
+            content_ref=query,
+            content_title=query,  # for a search the query IS the content
             is_ad=False,
             had_parse_error=item.had_errors() or cph is None,
         ))

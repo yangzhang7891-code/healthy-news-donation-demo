@@ -26,7 +26,12 @@ from typing import Optional
 # Bump whenever a field is added/removed/reinterpreted, or a platform's
 # extraction logic changes in a way that could change past output for
 # the same input.
-PARSER_VERSION = "1.1.0"
+PARSER_VERSION = "1.2.0"
+# 1.2.0 (2026-08-27): added content_title. Records stamped 1.1.0 or
+#   earlier carry no title, so they cannot support any content-based
+#   (e.g. negativity) measure — only channel-level analysis. Pooling
+#   them with 1.2.0 records for a valence analysis would silently
+#   treat "not collected" as "no signal".
 # 1.1.0 (2026-08-27): YouTube extraction learned the v2 channel shape
 #   ("channel" object alongside the older "subtitles" list). Donations
 #   stamped 1.0.0 that came from a v2 export have an empty channel
@@ -58,7 +63,22 @@ class DonationRecord:
     """Allowlist match on channel_or_account. None (not False) when there's nothing to check — collapsing that into False would misrepresent "unknown" as "confirmed not news"."""
 
     content_ref: Optional[str]
-    """Stable pointer to what was engaged with: a video ID/URL, or (for searches) the query text itself. Not the video title or post caption."""
+    """Stable pointer to what was engaged with: a video ID/URL, or (for searches) the query text itself."""
+
+    content_title: Optional[str]
+    """The human-readable title of what was watched, or the search query.
+
+    Required for the actual research question. The allowlist match on
+    channel_or_account establishes whether an item is *news*; it cannot
+    establish whether that item was *negative*, which is what this
+    project measures. Valence has to be read from the content itself,
+    and the title is the only content text a personal export reliably
+    carries — so dropping it (as this schema originally did) would
+    minimise away the study's dependent variable.
+
+    None where the platform's export simply has no title: every TikTok
+    and Meta record, and YouTube stubs for removed/private videos.
+    """
 
     is_ad: bool
     """True only for YouTube's explicitly-marked ad views — organic and ad-driven exposure are different mechanisms worth keeping apart."""

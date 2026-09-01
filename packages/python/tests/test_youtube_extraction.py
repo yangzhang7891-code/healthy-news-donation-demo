@@ -229,8 +229,66 @@ class TestWatchSearchDisambiguation:
         assert counts_by_type(records) == {"watch": 2}
 
     def test_search_query_text_is_kept_without_the_localized_prefix(self):
+        """Regression test for a bug this test itself used to enshrine.
+
+        It previously asserted "for dr nyheder direkte" — the parser split
+        the title on the first space, so the English preposition survived
+        ("Searched for X" -> "for X", and the Danish "Søgte efter X" ->
+        "efter X"). Every donated query carried a stray leading word,
+        which would quietly corrupt text analysis of search behaviour
+        while still looking plausible in the consent table. Asserting the
+        buggy value is what let it live: the fix is to match known
+        prefixes rather than to guess at word boundaries.
+        """
         records = youtube.extract_data(zip_with({"h/search-history.json": [self.SEARCH_RECORD]}))
-        assert records[0].content_ref == "for dr nyheder direkte"
+        assert records[0].content_ref == "dr nyheder direkte"
+        assert records[0].content_title == "dr nyheder direkte"
+
+    def test_danish_search_prefix_is_also_stripped(self):
+        danish = {**self.SEARCH_RECORD, "title": "Søgte efter dr nyheder direkte"}
+        records = youtube.extract_data(zip_with({"h/search-history.json": [danish]}))
+        assert records[0].content_ref == "dr nyheder direkte"
+
+    def test_an_unrecognised_prefix_keeps_the_title_whole(self):
+        """Better to donate a slightly untidy title than to truncate a real one."""
+        other = {**self.SEARCH_RECORD, "title": "Recherchiert nach dr nyheder"}
+        records = youtube.extract_data(zip_with({"h/search-history.json": [other]}))
+        assert records[0].content_ref == "Recherchiert nach dr nyheder"
+
+
+class TestContentTitle:
+    """The title is what any negativity/valence measure actually runs on.
+
+    A channel name establishes that an item is news; it cannot establish
+    whether that item was negative. Dropping the title (as this schema
+    originally did) would minimise away the study's dependent variable.
+    """
+
+    def test_video_title_is_extracted_without_the_english_prefix(self):
+        records = youtube.extract_data(zip_with({"h/watch-history.json": [WATCH_RECORD]}))
+        assert records[0].content_title == "Nyhedsoverblik DR Nyheder"
+
+    def test_video_title_is_extracted_without_the_danish_prefix(self):
+        danish = {**WATCH_RECORD, "title": "Så Debat om TV 2 Nyhederne"}
+        records = youtube.extract_data(zip_with({"h/watch-history.json": [danish]}))
+        assert records[0].content_title == "Debat om TV 2 Nyhederne"
+
+    def test_removed_video_stub_has_a_placeholder_title_not_a_real_one(self):
+        """Documents a wrinkle: the stub's 'title' is YouTube's own wording,
+        not a video title, so it must not be treated as content. It is
+        identifiable because the record has no channel and no video ID."""
+        stub = {"header": "YouTube", "title": "Watched a video that has been removed",
+                "time": "2024-03-01T10:15:30.000Z"}
+        records = youtube.extract_data(zip_with({"h/watch-history.json": [WATCH_RECORD, stub]}))
+        assert records[1].channel_or_account is None and records[1].content_ref is None
+
+    def test_titles_are_populated_across_the_committed_fixture(self):
+        watch = [r for r in extract(youtube.extract_data, "youtube/news_heavy_en.zip") if r.record_type == "watch"]
+        assert fill_rate(watch, "content_title") > 0.90
+
+    def test_search_records_carry_the_query_as_title_too(self):
+        searches = [r for r in extract(youtube.extract_data, "youtube/news_heavy_en.zip") if r.record_type == "search"]
+        assert searches and all(r.content_title for r in searches)
 
 
 class TestFieldFillRates:

@@ -167,5 +167,5 @@ class TestTheFix:
         """
         from port.donation.schema import PARSER_VERSION
 
-        assert PARSER_VERSION == "1.1.0"
-        assert all(r.parser_version == "1.1.0" for r in extract(youtube.extract_data, CHANGED))
+        assert PARSER_VERSION == "1.2.0"
+        assert all(r.parser_version == "1.2.0" for r in extract(youtube.extract_data, CHANGED))

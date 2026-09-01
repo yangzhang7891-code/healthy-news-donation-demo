@@ -81,6 +81,12 @@ BASELINE: dict[str, dict] = {
 FILL_FLOORS = [
     # (fixture, record types in scope or None for all, field, floor, observed at baseline)
     ("youtube/news_heavy_en.zip", {"watch"}, "channel_or_account", 0.85, 0.96),
+    # content_title carries the study's dependent variable (valence has to
+    # be read from text, not from a channel name), so it earns a floor of
+    # its own — a platform dropping the title would otherwise be invisible.
+    ("youtube/news_heavy_en.zip", {"watch"}, "content_title", 0.85, 0.96),
+    ("youtube/news_heavy_da.zip", {"watch"}, "content_title", 0.85, 0.96),
+    ("youtube/news_heavy_en.zip", {"search"}, "content_title", 0.95, 1.00),
     ("youtube/news_heavy_en.zip", {"watch"}, "content_ref", 0.85, 0.96),
     ("youtube/news_heavy_en.zip", {"search"}, "content_ref", 0.95, 1.00),
     ("youtube/news_heavy_en.zip", None, "timestamp_copenhagen", 0.95, 0.99),

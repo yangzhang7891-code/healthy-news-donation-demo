@@ -55,20 +55,20 @@ STRINGS: dict[str, dict[str, str]] = {
         "da": "Gennemgå dine data",
     },
     "drop_title": {
-        "en": "What we don't collect",
-        "da": "Hvad vi ikke indsamler",
+        "en": "What we collect, and what we don't",
+        "da": "Hvad vi indsamler, og hvad vi ikke gør",
     },
     "drop_youtube": {
-        "en": "We do not collect video titles, video descriptions, or the full text of anything you searched for — only which channel a video belongs to, when you watched or searched, and whether that channel matched our news-source list.",
-        "da": "Vi indsamler ikke videotitler, videobeskrivelser eller den fulde tekst af det, du har søgt efter — kun hvilken kanal en video tilhører, hvornår du så eller søgte, og om den kanal matchede vores nyhedskildeliste.",
+        "en": "We collect the title of each video you watched, the channel it came from, what you searched for, and when. Titles are needed because this study measures how negative news coverage is, which cannot be judged from a channel name alone. We do not collect video descriptions, comments, your subscriptions, or anything you did outside YouTube.",
+        "da": "Vi indsamler titlen på hver video, du har set, kanalen den kom fra, hvad du har søgt efter, og hvornår. Titlerne er nødvendige, fordi undersøgelsen måler, hvor negativ nyhedsdækning er, og det kan ikke vurderes ud fra et kanalnavn alene. Vi indsamler ikke videobeskrivelser, kommentarer, dine abonnementer eller noget, du har gjort uden for YouTube.",
     },
     "drop_tiktok": {
-        "en": "We do not collect video captions, comments, or profile bios. TikTok's own export does not include the creator's name on watch/like history, so those rows carry no channel information — only a link, a timestamp, and (for follows) the account you followed.",
-        "da": "Vi indsamler ikke video-tekster, kommentarer eller profilbeskrivelser. TikToks eget dataudtræk indeholder ikke skaberens navn i se-/synes godt om-historik, så disse rækker indeholder ingen kanalinformation — kun et link, et tidspunkt og (for følger) den konto, du fulgte.",
+        "en": "We collect what you searched for, the accounts you follow, and a link and timestamp for each video. TikTok's own export contains no video titles, captions, or creator names for watch and like history — so unlike YouTube, there is no content there for us to read, and those rows carry no channel either. We do not collect comments or profile bios.",
+        "da": "Vi indsamler, hvad du har søgt efter, de konti du følger, og et link og tidspunkt for hver video. TikToks eget dataudtræk indeholder hverken videotitler, -tekster eller skaberens navn i se-/synes godt om-historik — så i modsætning til YouTube er der intet indhold for os at læse, og disse rækker indeholder heller ingen kanal. Vi indsamler ikke kommentarer eller profilbeskrivelser.",
     },
     "drop_instagram": {
-        "en": "We do not collect post captions, comment text, or message content. This only covers who you follow, which pages/posts you liked or saved, your search terms, and Meta's own inferred ad-interest topics — not your feed itself, which isn't included in a personal data export.",
-        "da": "Vi indsamler ikke opslagstekster, kommentartekst eller beskedindhold. Dette dækker kun, hvem du følger, hvilke sider/opslag du har synes godt om eller gemt, dine søgeord og Metas egne udledte annonceinteresseemner — ikke selve din feed, som ikke er inkluderet i et personligt dataudtræk.",
+        "en": "We collect your search terms, the accounts and pages you follow, liked or saved, and Meta's own inferred ad-interest topics. Meta's export contains no post text, so unlike YouTube there is no content there for us to read. We do not collect comment text or message content — nor your feed itself, which a personal data export does not include at all.",
+        "da": "Vi indsamler dine søgeord, de konti og sider du følger, har synes godt om eller gemt, samt Metas egne udledte annonceinteresseemner. Metas dataudtræk indeholder ingen opslagstekst, så i modsætning til YouTube er der intet indhold for os at læse. Vi indsamler ikke kommentartekst eller beskedindhold — heller ikke selve din feed, som slet ikke indgår i et personligt dataudtræk.",
     },
     "records_table_title": {
         "en": "Your activity",
@@ -99,6 +99,7 @@ STRINGS: dict[str, dict[str, str]] = {
     "col_channel": {"en": "Channel / account", "da": "Kanal / konto"},
     "col_is_news": {"en": "News source?", "da": "Nyhedskilde?"},
     "col_content_ref": {"en": "What it points to", "da": "Hvad det peger på"},
+    "col_content_title": {"en": "Title / search text", "da": "Titel / søgetekst"},
     "col_is_ad": {"en": "Ad?", "da": "Annonce?"},
     "col_had_error": {"en": "Could not be fully read", "da": "Kunne ikke læses fuldt ud"},
     "col_parser_version": {"en": "Parser version", "da": "Parser-version"},

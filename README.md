@@ -25,12 +25,34 @@ seconds while Pyodide downloads.
 > here is developed and tested against synthetic fixtures — there is
 > no real personal data in this repository, and there never should be.
 >
-> Two constraints worth stating up front, because they bound what
-> this data can support: watch history records what was *watched*,
-> not everything that was *recommended*; and Meta exports show diet
-> **supply** (who you follow) rather than **exposure** (what the feed
-> actually showed you). A fuller `LIMITATIONS.md` is still to be
+> Three constraints worth stating up front, because they bound what
+> this data can support: watch history records what was *watched*, not
+> everything that was *recommended*; Meta exports show diet **supply**
+> (who you follow) rather than **exposure** (what the feed actually
+> showed you); and **TikTok's export contains no video titles, captions
+> or creator names at all**, so it supports timing and volume analysis
+> but not content analysis. A fuller `LIMITATIONS.md` is still to be
 > written.
+
+### What can actually be analysed
+
+The donation is designed so that news *valence* — the point of the
+study — is measurable, which requires content text, not just a channel
+name. What each platform yields:
+
+| | channel | content text | supports valence analysis? |
+| --- | --- | --- | --- |
+| YouTube watch | ✅ | ✅ video title | **yes** |
+| YouTube search | — | ✅ query | yes |
+| TikTok watch / like | ❌ not in export | ❌ not in export | no — timing/volume only |
+| TikTok search | — | ✅ query | yes |
+| Meta follow / like / save | ✅ account | ❌ not in export | account-level only |
+
+Titles are the one piece of content a personal export reliably
+carries, and they are what any negativity measure has to run on: an
+allowlist match on the channel establishes that an item is *news*, it
+cannot establish that the item was *negative*. The consent screen
+states this in plain language before anyone donates.
 
 Full documentation — the GDPR basis, the privacy design, and how to
 run it — is being written up separately. Start with

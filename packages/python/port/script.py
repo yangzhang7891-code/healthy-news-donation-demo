@@ -34,7 +34,10 @@ EXTRACTORS = {
 }
 
 RECORD_COLUMNS = [
-    "record_type", "timestamp_copenhagen", "channel_or_account",
+    # content_title sits right after the channel: it is the most revealing
+    # column, so a participant reviewing the table should meet it early
+    # rather than find it past a scroll.
+    "record_type", "timestamp_copenhagen", "channel_or_account", "content_title",
     "is_news", "content_ref", "is_ad", "had_parse_error", "parser_version",
 ]
 
@@ -43,6 +46,7 @@ RECORD_HEADERS = {
     "timestamp_copenhagen": t("col_timestamp"),
     "channel_or_account": t("col_channel"),
     "is_news": t("col_is_news"),
+    "content_title": t("col_content_title"),
     "content_ref": t("col_content_ref"),
     "is_ad": t("col_is_ad"),
     "had_parse_error": t("col_had_error"),

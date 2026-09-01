@@ -91,6 +91,7 @@ def _extract_link_records(entries: list, record_type: str) -> list[DonationRecor
             timestamp_utc_raw=raw,
             channel_or_account=None,  # not present in this export's browsing/like history — see module docstring
             is_news=None,
+            content_title=None,  # TikTok exports carry no title/caption anywhere
             content_ref=link,
             is_ad=False,
             had_parse_error=item.had_errors() or cph is None,
@@ -112,6 +113,7 @@ def _extract_search_records(entries: list) -> list[DonationRecord]:
             timestamp_utc_raw=raw,
             channel_or_account=None,
             is_news=None,
+            content_title=term,  # for a search the query IS the content
             content_ref=term,
             is_ad=False,
             had_parse_error=item.had_errors() or cph is None,
@@ -133,6 +135,7 @@ def _extract_following_records(entries: list) -> list[DonationRecord]:
             timestamp_utc_raw=raw,
             channel_or_account=username,
             is_news=is_news(username),
+            content_title=None,  # TikTok exports carry no title/caption anywhere
             content_ref=None,
             is_ad=False,
             had_parse_error=item.had_errors() or cph is None,
